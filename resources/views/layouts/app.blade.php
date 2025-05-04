@@ -21,8 +21,6 @@
     <link rel="stylesheet" href="{{ asset('sneat-template/assets/vendor/css/theme-default.css') }}" class="template-customizer-theme-css" />
     <link rel="stylesheet" href="{{ asset('sneat-template/assets/css/demo.css') }}" />
 
-    
-
     <!-- Vendors CSS -->
     <link rel="stylesheet" href="{{ asset('sneat-template/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}" />
     
@@ -30,7 +28,7 @@
     @stack('styles')
     
     <!-- Livewire Styles -->
-    @livewireStyles
+    @livewireStyles(['skipAlpine' => true])
 </head>
 <body>
     <div class="layout-wrapper layout-content-navbar">
@@ -71,83 +69,45 @@
     </div>
     
     <!-- Core JS -->
+    <!-- jQuery harus dimuat pertama -->
     <script src="{{ asset('sneat-template/assets/vendor/libs/jquery/jquery.js') }}"></script>
     <script src="{{ asset('sneat-template/assets/vendor/libs/popper/popper.js') }}"></script>
     <script src="{{ asset('sneat-template/assets/vendor/js/bootstrap.js') }}"></script>
+    
+    <!-- PerfectScrollbar dimuat sebelum menu.js -->
     <script src="{{ asset('sneat-template/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js') }}"></script>
+    
+    <!-- Helpers dan menu.js -->
+    <script src="{{ asset('sneat-template/assets/vendor/js/helpers.js') }}"></script>
     <script src="{{ asset('sneat-template/assets/vendor/js/menu.js') }}"></script>
     
     <!-- Main JS -->
     <script src="{{ asset('sneat-template/assets/js/main.js') }}"></script>
     
-    <!-- Alpine.js -->
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Livewire Scripts -->
+    @livewireScripts
+    
+    <!-- Alpine.js dimuat setelah menu.js dan Livewire -->
+    <!-- <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script> -->
     
     <!-- Page JS -->
     @stack('scripts')
-    
-    <!-- Livewire Scripts -->
-    @livewireScripts
-
-    <!-- Fix untuk integrasi Menu, Alpine.js dan Livewire -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Fix untuk menu.js error (menuPsScroll undefined)
-            if (typeof window.Helpers !== 'undefined' && typeof window.PerfectScrollbar !== 'undefined') {
-                try {
-                    // Inisialisasi ulang menu setelah DOM loaded
-                    window.Helpers.initMenu();
-                } catch (error) {
-                    console.warn('Menu initialization error:', error);
-                }
-            }
-
-            // Fix untuk menu items yang tidak berfungsi saat diklik
-            const menuItems = document.querySelectorAll('.menu-item a');
-            menuItems.forEach(item => {
-                if (item && item.getAttribute('href') && !item.getAttribute('href').startsWith('#') && 
-                    !item.classList.contains('menu-toggle')) {
-                    item.addEventListener('click', function(e) {
-                        // Hindari default behavior untuk menu dengan submenu
-                        if (this.classList.contains('menu-toggle')) {
-                            e.preventDefault();
-                            return;
-                        }
-                        
-                        // Redirect ke URL yang benar
-                        if (this.getAttribute('href') !== 'javascript:void(0);') {
-                            window.location.href = this.getAttribute('href');
-                        }
-                    });
+// Tambahkan kode ini setelah script lain
+document.addEventListener('DOMContentLoaded', function() {
+    // Pastikan semua link menu berfungsi dengan benar
+    setTimeout(function() {
+        document.querySelectorAll('.menu-link:not([data-event-added])').forEach(function(link) {
+            link.setAttribute('data-event-added', 'true');
+            link.addEventListener('click', function(e) {
+                const href = this.getAttribute('href');
+                if (href && href !== '#' && !href.startsWith('javascript:')) {
+                    window.location.href = href;
                 }
             });
         });
-
-        // Fix untuk Livewire dan Alpine.js yang saling konflik
-        document.addEventListener('livewire:load', function() {
-            // Re-inisialisasi menu setelah Livewire update
-            Livewire.hook('message.processed', () => {
-                if (typeof window.Helpers !== 'undefined') {
-                    try {
-                        // Re-init menu setelah Livewire update DOM
-                        window.Helpers.initMenu();
-                        
-                        // Re-init menu-toggle untuk dropdown
-                        document.querySelectorAll('.menu-toggle').forEach(menuToggle => {
-                            menuToggle.addEventListener('click', e => {
-                                e.preventDefault();
-                                const parentMenuItem = menuToggle.closest('.menu-item');
-                                if (parentMenuItem) {
-                                    parentMenuItem.classList.toggle('open');
-                                }
-                            });
-                        });
-                    } catch (error) {
-                        console.warn('Menu re-initialization error:', error);
-                    }
-                }
-            });
-        });
-    </script>
+    }, 1000); // Tunggu 1 detik untuk memastikan semua komponen dimuat
+});
+</script>
 </body>
 </html>

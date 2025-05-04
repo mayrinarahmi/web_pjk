@@ -23,6 +23,10 @@ use App\Http\Controllers\BackupController;
 use App\Http\Livewire\TahunAnggaran\Index as TahunAnggaranIndex;
 use App\Http\Livewire\TahunAnggaran\Create as TahunAnggaranCreate;
 use App\Http\Livewire\TahunAnggaran\Edit as TahunAnggaranEdit;
+// // Tambahkan import untuk Target Kelompok Bulan
+// use App\Http\Livewire\TargetKelompokBulan\Index as TargetKelompokBulanIndex;
+// use App\Http\Livewire\TargetKelompokBulan\Create as TargetKelompokBulanCreate;
+// use App\Http\Livewire\TargetKelompokBulan\Edit as TargetKelompokBulanEdit;
 
 // Route untuk halaman utama
 Route::get('/', function () {
@@ -32,7 +36,7 @@ Route::get('/', function () {
 // Route untuk autentikasi
 Route::get('/login', function () {
     return view('auth.login');
-})->name('login');
+})->name('login')->middleware('guest'); // Tambahkan middleware guest
 
 Route::post('/authenticate', function (Request $request) {
     $credentials = $request->validate([
@@ -48,7 +52,7 @@ Route::post('/authenticate', function (Request $request) {
     return back()->withErrors([
         'email' => 'Kredensial yang diberikan tidak cocok dengan catatan kami.',
     ])->onlyInput('email');
-})->name('authenticate');
+})->name('authenticate')->middleware('guest'); // Tambahkan middleware guest
 
 // Route untuk logout
 Route::post('/logout', function (Request $request) {
@@ -61,7 +65,6 @@ Route::post('/logout', function (Request $request) {
 Route::get('/profile/edit', function() {
     return view('profile.edit');
 })->name('profile.edit')->middleware('auth');
-
 
 // Route yang hanya bisa diakses oleh Administrator
 Route::middleware(['auth', 'role:Administrator'])->group(function () {
@@ -96,6 +99,11 @@ Route::middleware(['auth', 'role:Administrator,Operator'])->group(function () {
     Route::get('/target-anggaran/create', TargetAnggaranCreate::class)->name('target-anggaran.create');
     Route::get('/target-anggaran/{id}/edit', TargetAnggaranEdit::class)->name('target-anggaran.edit');
     
+    // // Tambahkan route untuk Target Kelompok Bulan sesuai yang ada di sidebar
+    // Route::get('/target-kelompok-bulan', TargetKelompokBulanIndex::class)->name('target-kelompok-bulan.index');
+    // Route::get('/target-kelompok-bulan/create', TargetKelompokBulanCreate::class)->name('target-kelompok-bulan.create');
+    // Route::get('/target-kelompok-bulan/{id}/edit', TargetKelompokBulanEdit::class)->name('target-kelompok-bulan.edit');
+    
     Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
     Route::get('/penerimaan/create', PenerimaanCreate::class)->name('penerimaan.create');
     Route::get('/penerimaan/{id}/edit', PenerimaanEdit::class)->name('penerimaan.edit');
@@ -106,6 +114,3 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
     Route::get('/laporan', LaporanIndex::class)->name('laporan.index');
 });
-
-// Hapus atau komentari baris ini karena file auth.php tidak ada
-// require __DIR__.'/auth.php';

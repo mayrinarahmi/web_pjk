@@ -9,6 +9,8 @@ use App\Models\TahunAnggaran;
 use App\Models\TargetAnggaran;
 use App\Models\TargetBulan;
 use Carbon\Carbon;
+use Livewire\Attributes\Layout;
+
 
 class Dashboard extends Component
 {
@@ -133,12 +135,12 @@ class Dashboard extends Component
             ];
         }
         
-        $this->emit('dashboardUpdated');
+        $this->dispatch('dashboardUpdated');
     }
     
     public function render()
     {
-        return view('livewire.dashboard');
+        return view('livewire.dashboard')->layout('components.layouts.app');
     }
 }
 
