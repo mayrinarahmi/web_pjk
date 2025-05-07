@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\TargetBulan;
 use App\Models\TahunAnggaran;
 use Livewire\WithPagination;
+use Carbon\Carbon;
 
 class Index extends Component
 {
@@ -34,7 +35,7 @@ class Index extends Component
         TargetBulan::find($id)->delete();
         session()->flash('message', 'Target bulan berhasil dihapus.');
         
-        $this->emit('targetBulanDeleted');
+        $this->dispatch('targetBulanDeleted');
     }
     
     public function render()

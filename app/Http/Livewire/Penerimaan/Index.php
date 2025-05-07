@@ -20,7 +20,7 @@ class Index extends Component
     public $tahunAnggaranId;
     
     public $tahunAnggaran = [];
-    public $kodeRekeningLevel4 = [];
+    public $kodeRekeningLevel5 = [];
     
     protected $paginationTheme = 'bootstrap';
     
@@ -32,7 +32,7 @@ class Index extends Component
         $activeTahun = TahunAnggaran::where('is_active', true)->first();
         $this->tahunAnggaranId = $activeTahun ? $activeTahun->id : null;
         
-        $this->kodeRekeningLevel4 = KodeRekening::where('level', 4)->orderBy('kode')->get();
+        $this->kodeRekeningLevel5 = KodeRekening::where('level', 5)->orderBy('kode')->get();
         
         // Default tanggal filter (bulan ini)
         $this->tanggalMulai = Carbon::now()->startOfMonth()->format('Y-m-d');
@@ -59,7 +59,7 @@ class Index extends Component
         $penerimaan->delete();
         
         session()->flash('message', 'Data penerimaan berhasil dihapus.');
-        $this->emit('penerimaanDeleted');
+        $this->dispatch('penerimaanDeleted');
     }
     
     public function render()

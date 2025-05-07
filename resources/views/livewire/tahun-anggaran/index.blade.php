@@ -33,9 +33,9 @@
                             <td>{{ $ta->tahun }}</td>
                             <td>
                                 @if($ta->is_active)
-                                    <span class="badge bg-success">Aktif</span>
+                                <span class="badge bg-success badge-fixed-width">Aktif</span>
                                 @else
-                                    <span class="badge bg-secondary">Tidak Aktif</span>
+                                <span class="badge bg-secondary badge-fixed-width">Tidak Aktif</span>
                                 @endif
                             </td>
                             <td>

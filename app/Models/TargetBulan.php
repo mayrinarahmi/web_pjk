@@ -24,21 +24,23 @@ class TargetBulan extends Model
         return $this->belongsTo(TahunAnggaran::class);
     }
     
-    // Fungsi untuk mendapatkan persentase target sampai bulan tertentu
     public static function getPersentaseSampaiDenganBulan($tahunAnggaranId, $bulan)
     {
+        // Ambil semua target bulan
         $targetBulan = self::where('tahun_anggaran_id', $tahunAnggaranId)->get();
-        $totalPersentase = 0;
         
+        // Cari persentase untuk bulan yang diminta secara langsung
         foreach ($targetBulan as $target) {
             $bulanArray = json_decode($target->bulan);
-            foreach ($bulanArray as $b) {
-                if ($b <= $bulan) {
-                    $totalPersentase += $target->persentase / count($bulanArray);
-                }
+            
+            // Jika bulan yang diminta ada dalam array bulan target ini
+            if (in_array($bulan, $bulanArray)) {
+                \Log::info("Target bulan $bulan ditemukan: " . $target->persentase . "%");
+                return $target->persentase;
             }
         }
         
-        return $totalPersentase;
+        \Log::info("Target bulan $bulan tidak ditemukan, mengembalikan 0%");
+        return 0;
     }
 }

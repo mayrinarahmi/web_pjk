@@ -20,7 +20,7 @@
                     <label for="kode_rekening_id" class="form-label">Kode Rekening</label>
                     <select class="form-select @error('kode_rekening_id') is-invalid @enderror" id="kode_rekening_id" wire:model="kode_rekening_id">
                         <option value="">Pilih Kode Rekening</option>
-                        @foreach($kodeRekeningLevel4 as $kode)
+                        @foreach($kodeRekeningLevel5 as $kode)
                             <option value="{{ $kode->id }}">{{ $kode->kode }} - {{ $kode->nama }}</option>
                         @endforeach
                     </select>

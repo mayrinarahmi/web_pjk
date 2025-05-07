@@ -56,6 +56,15 @@
     <script src="{{ asset('sneat-template/assets/js/main.js') }}"></script>
     
     @livewireScripts
+
+     <!-- Tambahkan baris ini untuk memuat script dari view lain -->
+     @stack('scripts')
+    
+    <script>
+    document.addEventListener('livewire:navigated', () => {
+        // Script lainnya tetap sama
+    });
+    </script>
     
     <script>
     document.addEventListener('livewire:navigated', () => {

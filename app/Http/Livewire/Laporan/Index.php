@@ -8,6 +8,7 @@ use App\Models\KodeRekening;
 use App\Models\TahunAnggaran;
 use App\Models\TargetAnggaran;
 use App\Models\TargetBulan;
+use App\Models\TargetPeriode;
 use Carbon\Carbon;
 use App\Exports\LaporanPenerimaanExport;
 use Maatwebsite\Excel\Facades\Excel;
@@ -20,7 +21,7 @@ class Index extends Component
     public $tanggalSelesai;
     public $tipeFilter = 'custom';
     public $tahunAnggaran = [];
-    public $persentaseTarget = 40; // Default 40% sesuai contoh laporan
+    public $persentaseTarget = 40; // Nilai default yang akan diganti dengan nilai dinamis
     
     public function mount()
     {
@@ -31,36 +32,63 @@ class Index extends Component
         // Default tanggal (bulan ini)
         $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
         $this->tanggalSelesai = Carbon::now()->format('Y-m-d');
+        
+        // Set persentase target berdasarkan bulan saat ini
+        if ($this->tahunAnggaranId) {
+            $bulanAkhir = Carbon::now()->month;
+            $this->persentaseTarget = TargetBulan::getPersentaseSampaiDenganBulan($this->tahunAnggaranId, $bulanAkhir);
+        }
     }
+
+    public function setCustomFilter($tipeFilter, $tanggalMulai, $tanggalSelesai)
+{
+    $this->tipeFilter = $tipeFilter;
+    $this->tanggalMulai = $tanggalMulai;
+    $this->tanggalSelesai = $tanggalSelesai;
+}
     
     public function setFilter($tipe)
     {
         $this->tipeFilter = $tipe;
+        $tahunSekarang = Carbon::now()->year;
         
         switch ($tipe) {
+            case 'mingguan':
+                // Filter untuk minggu ini
+                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
+                $this->tanggalSelesai = Carbon::now()->endOfWeek()->format('Y-m-d');
+                break;
+                
+            case 'minggu_lalu':
+                // Filter untuk minggu lalu
+                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
+                $this->tanggalSelesai = Carbon::now()->subWeek()->endOfWeek()->format('Y-m-d');
+                break;
+            }
+        switch ($tipe) {
             case 'bulanan':
-                $this->tanggalMulai = Carbon::now()->startOfMonth()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d'); // Selalu dari awal tahun
                 $this->tanggalSelesai = Carbon::now()->endOfMonth()->format('Y-m-d');
                 break;
             case 'triwulan1':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
-                $this->tanggalSelesai = Carbon::now()->startOfYear()->addMonths(3)->subDay()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
+                $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 3, 31)->format('Y-m-d');
                 break;
             case 'triwulan2':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->addMonths(3)->format('Y-m-d');
-                $this->tanggalSelesai = Carbon::now()->startOfYear()->addMonths(6)->subDay()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d'); // Selalu dari awal tahun
+                $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 6, 30)->format('Y-m-d');
                 break;
             case 'triwulan3':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->addMonths(6)->format('Y-m-d');
-                $this->tanggalSelesai = Carbon::now()->startOfYear()->addMonths(9)->subDay()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d'); // Selalu dari awal tahun
+                $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 9, 30)->format('Y-m-d');
                 break;
             case 'triwulan4':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->addMonths(9)->format('Y-m-d');
-                $this->tanggalSelesai = Carbon::now()->endOfYear()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d'); // Selalu dari awal tahun
+                $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 12, 31)->format('Y-m-d');
                 break;
             case 'tahunan':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
-                $this->tanggalSelesai = Carbon::now()->endOfYear()->format('Y-m-d');
+                $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
+                $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 12, 31)->format('Y-m-d');
                 break;
         }
     }
@@ -98,116 +126,156 @@ class Index extends Component
     }
     
     private function getLaporanData()
-    {
-        if (!$this->tahunAnggaranId) {
-            return [];
+{
+    if (!$this->tahunAnggaranId) {
+        return [];
+    }
+    
+    $tahunAnggaran = TahunAnggaran::find($this->tahunAnggaranId);
+    $tahun = $tahunAnggaran->tahun;
+    
+    // Tentukan bulan yang sedang dilaporkan
+    $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
+
+    // Ambil persentase target berdasarkan tipe filter
+if (strpos($this->tipeFilter, 'minggu') !== false) {
+    $persentaseTarget = TargetPeriode::getPersentaseForWeek($this->tahunAnggaranId, $this->tanggalSelesai);
+} else {
+    $persentaseTarget = TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
+}
+
+$this->persentaseTarget = round($persentaseTarget, 2);
+    
+    // Ambil persentase target dari model TargetPeriode
+    $persentaseTarget = TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
+    $this->persentaseTarget = $persentaseTarget ?: 0; // Default ke 0 jika tidak ada target
+    
+    // Ambil semua kode rekening dan kelompokkan berdasarkan level
+    $kodeRekening = KodeRekening::orderBy('kode')->get();
+    $kodeByLevel = [];
+    foreach ($kodeRekening as $kode) {
+        $kodeByLevel[$kode->level][] = $kode;
+    }
+    
+    // Siapkan data untuk semua kode rekening
+    $dataPerKode = [];
+    
+    // Langkah 1: Inisialisasi semua data kode rekening
+    foreach ($kodeRekening as $kode) {
+        // Siapkan array penerimaan per bulan
+        $penerimaanPerBulan = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $penerimaanPerBulan[$i] = 0;
         }
         
-        $tahunAnggaran = TahunAnggaran::find($this->tahunAnggaranId);
-        $tahun = $tahunAnggaran->tahun;
-        
-        // Tentukan bulan yang sedang dilaporkan
-        $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
-        
-        // Ambil semua kode rekening
-        $kodeRekening = KodeRekening::orderBy('kode')->get();
-        
-        // Siapkan data laporan
-        $dataLaporan = [];
-        
-        // Proses untuk setiap kode rekening
-        foreach ($kodeRekening as $kode) {
-            $targetAnggaran = 0; // Pagu Anggaran
-            
+        $dataPerKode[$kode->id] = [
+            'id' => $kode->id,
+            'kode' => $kode->kode,
+            'uraian' => $kode->nama,
+            'level' => $kode->level,
+            'parent_id' => $kode->parent_id,
+            'target_anggaran' => 0,
+            'penerimaan_per_bulan' => $penerimaanPerBulan,
+            'realisasi_sd_bulan_ini' => 0
+        ];
+    }
+    
+    // Langkah 2: Hitung nilai untuk level terbawah (level 5)
+    if (isset($kodeByLevel[5])) {
+        foreach ($kodeByLevel[5] as $kode) {
             // Ambil target anggaran
             $targetData = TargetAnggaran::where('kode_rekening_id', $kode->id)
                 ->where('tahun_anggaran_id', $this->tahunAnggaranId)
                 ->first();
-                
+            
             if ($targetData) {
-                $targetAnggaran = $targetData->jumlah;
+                $dataPerKode[$kode->id]['target_anggaran'] = $targetData->jumlah;
             }
             
-            // Hitung target sampai dengan bulan ini (Target 40% pada contoh laporan)
-            $targetSdBulanIni = $targetAnggaran * ($this->persentaseTarget / 100);
+            // Ambil data penerimaan
+            $penerimaan = Penerimaan::where('kode_rekening_id', $kode->id)
+                ->where('tahun_anggaran_id', $this->tahunAnggaranId)
+                ->whereYear('tanggal', $tahun)
+                ->whereDate('tanggal', '<=', $this->tanggalSelesai)
+                ->get();
+                
             
-            // Inisialisasi array untuk menyimpan penerimaan per bulan
-            $penerimaanPerBulan = [];
-            for ($i = 1; $i <= 12; $i++) {
-                $penerimaanPerBulan[$i] = 0;
+            foreach ($penerimaan as $p) {
+                $bulan = $p->tanggal->month;
+                $dataPerKode[$kode->id]['penerimaan_per_bulan'][$bulan] += $p->jumlah;
+                $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] += $p->jumlah;
             }
-            
-            // Hitung realisasi per bulan dan total
-            $realisasiSdBulanIni = 0;
-            
-            if ($kode->level == 4) {
-                // Untuk level 4, ambil data langsung dari tabel penerimaan
-                $penerimaan = Penerimaan::where('kode_rekening_id', $kode->id)
-                    ->where('tahun_anggaran_id', $this->tahunAnggaranId)
-                    ->whereYear('tanggal', $tahun)
-                    ->whereDate('tanggal', '<=', $this->tanggalSelesai)
-                    ->get();
+        }
+    }
+    
+    // Langkah 3: Agregasi dari bawah ke atas (level 5 -> 4 -> 3 -> 2 -> 1)
+    for ($level = 4; $level >= 1; $level--) {
+        if (isset($kodeByLevel[$level])) {
+            foreach ($kodeByLevel[$level] as $kode) {
+                // Cari semua anak langsung
+                $children = $kodeRekening->where('parent_id', $kode->id);
                 
-                foreach ($penerimaan as $p) {
-                    $bulan = $p->tanggal->month;
-                    $penerimaanPerBulan[$bulan] += $p->jumlah;
-                    $realisasiSdBulanIni += $p->jumlah;
-                }
-            } else {
-                // Untuk level 1-3, hitung dari level di bawahnya
-                $childrenIds = $kode->getAllLevel4Descendants();
-                
-                if (!empty($childrenIds)) {
-                    $penerimaan = Penerimaan::whereIn('kode_rekening_id', $childrenIds)
-                        ->where('tahun_anggaran_id', $this->tahunAnggaranId)
-                        ->whereYear('tanggal', $tahun)
-                        ->whereDate('tanggal', '<=', $this->tanggalSelesai)
-                        ->get();
+                // Hitung total dari anak-anak
+                foreach ($children as $child) {
+                    $childData = $dataPerKode[$child->id];
                     
-                    foreach ($penerimaan as $p) {
-                        $bulan = $p->tanggal->month;
-                        $penerimaanPerBulan[$bulan] += $p->jumlah;
-                        $realisasiSdBulanIni += $p->jumlah;
+                    // Tambahkan target anggaran
+                    $dataPerKode[$kode->id]['target_anggaran'] += $childData['target_anggaran'];
+                    
+                    // Tambahkan realisasi
+                    $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] += $childData['realisasi_sd_bulan_ini'];
+                    
+                    // Tambahkan penerimaan per bulan
+                    for ($i = 1; $i <= 12; $i++) {
+                        $dataPerKode[$kode->id]['penerimaan_per_bulan'][$i] += $childData['penerimaan_per_bulan'][$i];
                     }
                 }
             }
-            
-            // Hitung realisasi bulan ini (bulan terakhir dalam periode laporan)
-            $realisasiBulanIni = $penerimaanPerBulan[$bulanAkhir];
-            
-            // Hitung lebih/kurang dari target
-            $lebihKurang = $targetSdBulanIni - $realisasiSdBulanIni;
-            
-            // Hitung persentase realisasi
-            $persentase = 0;
-            if ($targetAnggaran > 0) {
-                $persentase = ($realisasiSdBulanIni / $targetAnggaran) * 100;
-            }
-            
-            // Tambahkan ke data laporan
-            $dataLaporan[] = [
-                'id' => $kode->id,
-                'kode' => $kode->kode,
-                'uraian' => $kode->nama,
-                'level' => $kode->level,
-                'parent_id' => $kode->parent_id,
-                'persentase' => round($persentase, 2),
-                'target_anggaran' => $targetAnggaran,
-                'target_sd_bulan_ini' => $targetSdBulanIni,
-                'kurang_dari_target' => $lebihKurang,
-                'realisasi_sd_bulan_ini' => $realisasiSdBulanIni,
-                'realisasi_bulan_ini' => $realisasiBulanIni,
-                'penerimaan_per_bulan' => $penerimaanPerBulan
-            ];
+        }
+    }
+    
+    // Langkah 4: Format data untuk output
+    $dataLaporan = [];
+    
+    foreach ($kodeRekening as $kode) {
+        $data = $dataPerKode[$kode->id];
+        $targetAnggaran = $data['target_anggaran'];
+        $realisasiSdBulanIni = $data['realisasi_sd_bulan_ini'];
+        
+        // Hitung target sampai dengan bulan ini
+        $targetSdBulanIni = $targetAnggaran * ($this->persentaseTarget / 100);
+        
+        // Hitung lebih/kurang dari target (nilai positif = kurang dari target)
+        $lebihKurang = $targetSdBulanIni - $realisasiSdBulanIni;
+        
+        // Hitung persentase realisasi
+        $persentase = 0;
+        if ($targetAnggaran > 0) {
+            $persentase = ($realisasiSdBulanIni / $targetAnggaran) * 100;
         }
         
-        // Urutkan data laporan berdasarkan kode rekening
-        usort($dataLaporan, function($a, $b) {
-            return $a['kode'] <=> $b['kode'];
-        });
-        
-        return $dataLaporan;
+        $dataLaporan[] = [
+            'id' => $data['id'],
+            'kode' => $data['kode'],
+            'uraian' => $data['uraian'],
+            'level' => $data['level'],
+            'parent_id' => $data['parent_id'],
+            'persentase' => round($persentase, 2),
+            'target_anggaran' => $targetAnggaran,
+            'target_sd_bulan_ini' => $targetSdBulanIni,
+            'kurang_dari_target' => $lebihKurang,
+            'realisasi_sd_bulan_ini' => $realisasiSdBulanIni,
+            'penerimaan_per_bulan' => $data['penerimaan_per_bulan']
+        ];
     }
+    
+    // Urutkan data laporan berdasarkan kode rekening
+    usort($dataLaporan, function($a, $b) {
+        return $a['kode'] <=> $b['kode'];
+    });
+    
+    return $dataLaporan;
+}
     
     public function render()
     {
@@ -217,5 +285,4 @@ class Index extends Component
             'data' => $data
         ]);
     }
-
 }

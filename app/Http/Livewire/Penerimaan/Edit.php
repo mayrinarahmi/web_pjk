@@ -16,7 +16,7 @@ class Edit extends Component
     public $jumlah;
     public $keterangan;
     
-    public $kodeRekeningLevel4 = [];
+    public $kodeRekeningLevel5 = [];
     public $tahunAnggaran = [];
     
     protected $rules = [
@@ -37,7 +37,7 @@ class Edit extends Component
         $this->jumlah = $penerimaan->jumlah;
         $this->keterangan = $penerimaan->keterangan;
         
-        $this->kodeRekeningLevel4 = KodeRekening::where('level', 4)
+        $this->kodeRekeningLevel5 = KodeRekening::where('level', 5)
             ->orderBy('kode')
             ->get();
             
@@ -48,10 +48,10 @@ class Edit extends Component
     {
         $this->validate();
         
-        // Validasi tambahan: pastikan kode rekening adalah level 4
+        // Validasi tambahan: pastikan kode rekening adalah level 5
         $kodeRekening = KodeRekening::find($this->kode_rekening_id);
-        if ($kodeRekening->level != 4) {
-            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 4.');
+        if ($kodeRekening->level != 5) {
+            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 5.');
             return;
         }
         

@@ -32,7 +32,7 @@ class Index extends Component
         User::find($id)->delete();
         session()->flash('message', 'Pengguna berhasil dihapus.');
         
-        $this->emit('userDeleted');
+        $this->dispatch('userDeleted');
     }
     
     public function render()

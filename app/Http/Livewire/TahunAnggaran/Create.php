@@ -34,7 +34,7 @@ class Create extends Component
     }
     
     public function render()
-    {
-        return view('livewire.tahun-anggaran.create');
-    }
+{
+    return view('livewire.tahun-anggaran.create');
+}
 }

@@ -21,7 +21,7 @@
                     <label for="kodeRekeningId" class="form-label">Kode Rekening</label>
                     <select wire:model="kodeRekeningId" id="kodeRekeningId" class="form-select">
                         <option value="">Semua Kode Rekening</option>
-                        @foreach($kodeRekeningLevel4 as $kode)
+                        @foreach($kodeRekeningLevel5 as $kode)
                             <option value="{{ $kode->id }}">{{ $kode->kode }} - {{ $kode->nama }}</option>
                         @endforeach
                     </select>

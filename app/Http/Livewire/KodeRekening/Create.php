@@ -32,15 +32,22 @@ class Create extends Component
     }
     
     public function updateAvailableParents()
-    {
-        if ($this->level == 1) {
-            $this->availableParents = [];
-        } else {
-            $this->availableParents = KodeRekening::where('level', $this->level - 1)
-                ->orderBy('kode')
-                ->get();
-        }
+{
+    if ($this->level == 1) {
+        $this->availableParents = [];
+    } else if ($this->level == 5) {
+        // Untuk level 5, bisa memilih parent dari level 3 dan 4
+        $this->availableParents = KodeRekening::whereIn('level', [$this->level - 1, $this->level - 2])
+            ->orderBy('level', 'desc') // Urutkan berdasarkan level (level 4 dulu, kemudian level 3)
+            ->orderBy('kode')
+            ->get();
+    } else {
+        // Untuk level lainnya tetap hanya bisa memilih parent 1 tingkat di atasnya
+        $this->availableParents = KodeRekening::where('level', $this->level - 1)
+            ->orderBy('kode')
+            ->get();
     }
+}
     
     public function save()
     {

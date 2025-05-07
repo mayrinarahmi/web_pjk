@@ -56,7 +56,7 @@ class Index extends Component
         $tahunAnggaran->delete();
         session()->flash('message', 'Tahun anggaran berhasil dihapus.');
         
-        $this->emit('tahunAnggaranDeleted');
+        $this->dispatch('tahunAnggaranDeleted');
     }
     
     public function render()

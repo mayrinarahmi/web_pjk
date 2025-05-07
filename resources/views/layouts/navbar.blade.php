@@ -20,7 +20,7 @@
             <li class="nav-item navbar-dropdown dropdown-user dropdown">
                 <a class="nav-link dropdown-toggle hide-arrow" href="javascript:void(0);" data-bs-toggle="dropdown">
                     <div class="avatar avatar-online">
-                        <img src="{{ asset('sneat-template/assets/img/avatars/1.png') }}" alt class="w-px-40 h-auto rounded-circle">
+                        <img src="{{ asset('sneat-template/assets/img/avatars/cat.png') }}" alt class="w-px-40 h-auto rounded-circle">
                     </div>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end">
@@ -29,7 +29,7 @@
                             <div class="d-flex">
                                 <div class="flex-shrink-0 me-3">
                                     <div class="avatar avatar-online">
-                                        <img src="{{ asset('sneat-template/assets/img/avatars/1.png') }}" alt class="w-px-40 h-auto rounded-circle">
+                                        <img src="{{ asset('sneat-template/assets/img/avatars/cat.png') }}" alt class="w-px-40 h-auto rounded-circle">
                                     </div>
                                 </div>
                               
@@ -44,15 +44,15 @@
                     <li>
                         <div class="dropdown-divider"></div>
                     </li>
-                    <li>
+                    <!-- <li>
                         <a class="dropdown-item" href="{{ route('profile.edit') }}">
                             <i class="bx bx-user me-2"></i>
                             <span class="align-middle">Profil Saya</span>
                         </a>
-                    </li>
-                    <li>
+                    </li> -->
+                    <!-- <li>
                         <div class="dropdown-divider"></div>
-                    </li>
+                    </li> -->
                     <li>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf

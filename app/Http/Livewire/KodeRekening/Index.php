@@ -62,7 +62,7 @@ class Index extends Component
         $kodeRekening->delete();
         session()->flash('message', 'Kode rekening berhasil dihapus.');
         
-        $this->emit('kodeRekeningDeleted');
+        $this->dispatch('kodeRekeningDeleted');
     }
     
     public function render()
