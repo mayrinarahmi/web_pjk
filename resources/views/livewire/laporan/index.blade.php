@@ -38,87 +38,56 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Tambahkan Mode Tampilan -->
             <div class="row mb-3">
-    <div class="col-md-12">
-        <div class="btn-group" role="group">
-            <!-- <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('mingguan')">Minggu Ini</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('minggu_lalu')">Minggu Lalu</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('bulanan')">Bulanan</button> -->
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan1')">Triwulan I</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan2')">Triwulan II</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan3')">Triwulan III</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan4')">Triwulan IV</button>
-            <!-- <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('tahunan')">Tahunan</button> -->
-        </div>
-    </div>
-</div>
-
-<!-- Form Filter Kustom -->
-<!-- <div class="row mb-3">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h6 class="mb-0">Filter Kustom</h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label for="customTanggalMulai" class="form-label">Tanggal Mulai</label>
-                        <input type="date" id="customTanggalMulai" class="form-control">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="customTanggalSelesai" class="form-label">Tanggal Selesai</label>
-                        <input type="date" id="customTanggalSelesai" class="form-control">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="button" class="btn btn-primary" onclick="applyCustomFilter()">Terapkan Filter</button>
+                <div class="col-md-12">
+                    <label class="form-label">Mode Tampilan:</label>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="viewMode" id="specificMode" wire:click="setViewMode('specific')" {{ $viewMode == 'specific' ? 'checked' : '' }}>
+                        <label class="btn btn-outline-primary" for="specificMode">Hanya Triwulan Terpilih</label>
+                        
+                        <input type="radio" class="btn-check" name="viewMode" id="cumulativeMode" wire:click="setViewMode('cumulative')" {{ $viewMode == 'cumulative' ? 'checked' : '' }}>
+                        <label class="btn btn-outline-primary" for="cumulativeMode">Kumulatif s/d Triwulan</label>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div> -->
-
-<script>
-    function applyCustomFilter() {
-        const tanggalMulai = document.getElementById('customTanggalMulai').value;
-        const tanggalSelesai = document.getElementById('customTanggalSelesai').value;
-        
-        if (tanggalMulai && tanggalSelesai) {
-            @this.setCustomFilter('custom', tanggalMulai, tanggalSelesai);
-        } else {
-            alert('Silakan pilih tanggal mulai dan tanggal selesai');
-        }
-    }
-</script>
-            <!-- <div class="row mb-3">
+            
+            <div class="row mb-3">
                 <div class="col-md-12">
                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('bulanan')">Bulanan</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan1')">Triwulan I</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan2')">Triwulan II</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan3')">Triwulan III</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('triwulan4')">Triwulan IV</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="setFilter('tahunan')">Tahunan</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm {{ $tipeFilter == 'triwulan1' ? 'active' : '' }}" wire:click="setFilter('triwulan1')">Triwulan I</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm {{ $tipeFilter == 'triwulan2' ? 'active' : '' }}" wire:click="setFilter('triwulan2')">Triwulan II</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm {{ $tipeFilter == 'triwulan3' ? 'active' : '' }}" wire:click="setFilter('triwulan3')">Triwulan III</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm {{ $tipeFilter == 'triwulan4' ? 'active' : '' }}" wire:click="setFilter('triwulan4')">Triwulan IV</button>
                     </div>
                 </div>
-            </div> -->
+            </div>
+
+            <script>
+                function applyCustomFilter() {
+                    const tanggalMulai = document.getElementById('customTanggalMulai').value;
+                    const tanggalSelesai = document.getElementById('customTanggalSelesai').value;
+                    
+                    if (tanggalMulai && tanggalSelesai) {
+                        @this.setCustomFilter('custom', tanggalMulai, tanggalSelesai);
+                    } else {
+                        alert('Silakan pilih tanggal mulai dan tanggal selesai');
+                    }
+                }
+            </script>
             
             @php
-                // Definisikan variabel default untuk menghindari error
-                $tanggalAkhir = $tanggalSelesai ?? now()->format('Y-m-d');
-                $bulanAkhir = Carbon\Carbon::parse($tanggalAkhir)->month;
+                // Definisikan variabel untuk menampilkan bulan berdasarkan mode
+                $bulanAwal = $bulanAwal ?? 1;
+                $bulanAkhir = $bulanAkhir ?? 12;
                 
-                // Hitung jumlah kolom bulan jika data tersedia
-                $jumlahKolomBulan = 0;
-                if (!empty($data) && isset($data[0]['penerimaan_per_bulan'])) {
-                    $jumlahKolomBulan = count(array_filter($data[0]['penerimaan_per_bulan'], 
-                        function($value, $key) use ($bulanAkhir) { 
-                            return $key <= $bulanAkhir; 
-                        }, 
-                        ARRAY_FILTER_USE_BOTH
-                    ));
-                }
+                // Tentukan rentang bulan yang akan ditampilkan
+                $tampilkanDariBulan = $viewMode === 'specific' ? $bulanAwal : 1;
+                $tampilkanSampaiBulan = $bulanAkhir;
+                
+                // Hitung jumlah kolom bulan yang akan ditampilkan
+                $jumlahKolomBulan = $tampilkanSampaiBulan - $tampilkanDariBulan + 1;
             @endphp
             
             <div class="table-responsive">
@@ -138,7 +107,7 @@
                             @endif
                         </tr>
                         <tr>
-                            @for($i = 1; $i <= $bulanAkhir; $i++)
+                            @for($i = $tampilkanDariBulan; $i <= $tampilkanSampaiBulan; $i++)
                                 <th class="text-center">{{ Carbon\Carbon::create()->month($i)->format('M') }}</th>
                             @endfor
                         </tr>
@@ -153,7 +122,7 @@
                                 <td class="text-end">{{ number_format($item['target_sd_bulan_ini'], 0, ',', '.') }}</td>
                                 <td class="text-end">{{ number_format($item['kurang_dari_target'], 0, ',', '.') }}</td>
                                 <td class="text-end">{{ number_format($item['realisasi_sd_bulan_ini'], 0, ',', '.') }}</td>
-                                @for($i = 1; $i <= $bulanAkhir; $i++)
+                                @for($i = $tampilkanDariBulan; $i <= $tampilkanSampaiBulan; $i++)
                                     <td class="text-end">{{ number_format($item['penerimaan_per_bulan'][$i] ?? 0, 0, ',', '.') }}</td>
                                 @endfor
                             </tr>

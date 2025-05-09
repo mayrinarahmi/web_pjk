@@ -13,6 +13,11 @@ class Index extends Component
     public $search = '';
     protected $paginationTheme = 'bootstrap';
     
+    // Tambahkan queryString untuk mempertahankan pencarian saat navigasi
+    protected $queryString = [
+        'search' => ['except' => ''],
+    ];
+    
     protected $listeners = ['tahunAnggaranDeleted' => '$refresh'];
     
     public function updatingSearch()
@@ -27,15 +32,22 @@ class Index extends Component
         
         // Aktifkan tahun anggaran yang dipilih
         $tahunAnggaran = TahunAnggaran::find($id);
-        $tahunAnggaran->is_active = true;
-        $tahunAnggaran->save();
-        
-        session()->flash('message', 'Tahun anggaran ' . $tahunAnggaran->tahun . ' berhasil diaktifkan.');
+        if ($tahunAnggaran) {
+            $tahunAnggaran->is_active = true;
+            $tahunAnggaran->save();
+            
+            session()->flash('message', 'Tahun anggaran ' . $tahunAnggaran->tahun . ' berhasil diaktifkan.');
+        }
     }
     
     public function delete($id)
     {
         $tahunAnggaran = TahunAnggaran::find($id);
+        
+        if (!$tahunAnggaran) {
+            session()->flash('error', 'Tahun anggaran tidak ditemukan.');
+            return;
+        }
         
         // Cek apakah tahun anggaran memiliki data terkait
         if ($tahunAnggaran->targetAnggaran()->count() > 0) {

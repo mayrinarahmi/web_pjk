@@ -10,35 +10,21 @@ class Index extends Component
 {
     use WithPagination;
     
-    public $search = '';
-    public $level = '';
+    // Hapus semua property filter
     public $showHierarchy = true;
     protected $paginationTheme = 'bootstrap';
     
     protected $listeners = ['kodeRekeningDeleted' => '$refresh'];
     
-    public function updatingSearch()
-    {
-        $this->resetPage();
-        $this->showHierarchy = false;
-    }
-    
-    public function updatingLevel()
-    {
-        $this->resetPage();
-        $this->showHierarchy = false;
-    }
-    
     public function resetFilters()
     {
-        $this->search = '';
-        $this->level = '';
         $this->showHierarchy = true;
         $this->resetPage();
     }
     
     public function delete($id)
     {
+        // Kode delete tetap sama seperti sebelumnya
         $kodeRekening = KodeRekening::find($id);
         
         // Cek apakah memiliki child
@@ -92,21 +78,8 @@ class Index extends Component
                 'kodeRekening' => $kodeRekening
             ]);
         } else {
-            // Tampilkan dengan filter
-            $query = KodeRekening::query();
-            
-            if ($this->search) {
-                $query->where(function($q) {
-                    $q->where('kode', 'like', '%' . $this->search . '%')
-                      ->orWhere('nama', 'like', '%' . $this->search . '%');
-                });
-            }
-            
-            if ($this->level) {
-                $query->where('level', $this->level);
-            }
-            
-            $kodeRekening = $query->orderBy('kode')->paginate(15);
+            // Tampilkan data tanpa filter
+            $kodeRekening = KodeRekening::orderBy('kode')->paginate(15);
             
             return view('livewire.kode-rekening.index', [
                 'kodeRekening' => $kodeRekening

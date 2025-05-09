@@ -9,11 +9,12 @@
         <!-- Search -->
         <div class="navbar-nav align-items-center">
             <div class="nav-item d-flex align-items-center">
-                <i class="bx bx-search fs-4 lh-0"></i>
-                <input type="text" class="form-control border-0 shadow-none" placeholder="Search..." aria-label="Search...">
+                <!-- <i class="bx bx-search fs-4 lh-0"></i> -->
+                <h5 class="card-title ">BADAN PENGELOLA KEUANGAN, PENDAPATAN DAN ASET DAERAH KOTA BANJARMASIN</h5>
+                <!-- <input type="text" class="form-control border-0 " placeholder="BADAN PENGELOLA KEUANGAN, PENDAPATAN DAN ASET DAERAH KOTA BANJARMASIN" aria-label="BADAN PENGELOLA KEUANGAN, PENDAPATAN DAN ASET DAERAH KOTA BANJARMASIN"> -->
             </div>
         </div>
-        <!-- /Search -->
+        
 
         <ul class="navbar-nav flex-row align-items-center ms-auto">
             <!-- User -->

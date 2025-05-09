@@ -7,33 +7,33 @@
             </a>
         </div>
         <div class="card-body">
+            <!-- Form pencarian super sederhana -->
             <div class="row mb-3">
-                <div class="col-md-4">
+                <div class="col-md-12">
                     <div class="input-group">
                         <span class="input-group-text"><i class="bx bx-search"></i></span>
-                        <input type="text" class="form-control" placeholder="Cari kode atau nama..." wire:model="search">
+                        <input type="text" id="simpleSearch" class="form-control" placeholder="Ketik untuk mencari...">
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <select class="form-select" wire:model="level">
-                        <option value="">Semua Level</option>
-                        <option value="1">Level 1</option>
-                        <option value="2">Level 2</option>
-                        <option value="3">Level 3</option>
-                        <option value="4">Level 4</option>
-                        <option value="5">Level 5</option>
-                        <option value="6">Level 6</option>
-                    </select>
-                </div>
-                <div class="col-md-5 text-end">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" wire:click="resetFilters">
-                        <i class="bx bx-reset"></i> Reset Filter
-                    </button>
                 </div>
             </div>
             
+            <!-- Feedback message -->
+            @if(session()->has('message'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    {{ session('message') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+            
+            @if(session()->has('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {{ session('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+            
             <div class="table-responsive">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover" id="dataTable">
                     <thead class="table-light">
                         <tr>
                             <th width="5%">No</th>
@@ -70,7 +70,7 @@
                             </td>
                         </tr>
                         @empty
-                        <tr>
+                        <tr class="no-data-row">
                             <td colspan="6" class="text-center">Tidak ada data</td>
                         </tr>
                         @endforelse
@@ -83,4 +83,74 @@
             </div>
         </div>
     </div>
+
+    <!-- Script Pencarian Super-Sederhana -->
+    <script>
+        // Tunggu sampai halaman selesai dimuat
+        document.addEventListener('DOMContentLoaded', function() {
+            // Ambil elemen input pencarian
+            const searchInput = document.getElementById('simpleSearch');
+            
+            // Tambahkan event listener untuk input
+            searchInput.addEventListener('input', function() {
+                // Ambil nilai pencarian (lowercase)
+                const searchText = this.value.toLowerCase();
+                
+                // Ambil semua baris dalam tabel kecuali header
+                const rows = document.querySelectorAll('#dataTable tbody tr');
+                
+                // Jumlah baris yang terlihat
+                let visibleCount = 0;
+                
+                // Loop melalui semua baris
+                rows.forEach(function(row) {
+                    // Skip baris "tidak ada data"
+                    if (row.classList.contains('no-data-row')) {
+                        return;
+                    }
+                    
+                    // Ambil teks dari kolom kode dan nama
+                    const kode = row.cells[1].textContent.toLowerCase();
+                    const nama = row.cells[2].textContent.toLowerCase();
+                    
+                    // Cek apakah teks pencarian ada dalam kode atau nama
+                    if (kode.includes(searchText) || nama.includes(searchText)) {
+                        // Tampilkan baris
+                        row.style.display = '';
+                        visibleCount++;
+                    } else {
+                        // Sembunyikan baris
+                        row.style.display = 'none';
+                    }
+                });
+                
+                // Tangani kasus "tidak ada hasil"
+                let noDataRow = document.querySelector('.no-data-row');
+                
+                if (visibleCount === 0) {
+                    // Jika tidak ada hasil
+                    if (noDataRow) {
+                        // Update pesan dan tampilkan
+                        noDataRow.style.display = '';
+                        noDataRow.querySelector('td').textContent = 'Tidak ditemukan hasil untuk "' + searchText + '"';
+                    } else {
+                        // Buat baris pesan jika belum ada
+                        const tbody = document.querySelector('#dataTable tbody');
+                        const tr = document.createElement('tr');
+                        tr.className = 'no-data-row';
+                        const td = document.createElement('td');
+                        td.colSpan = 6;
+                        td.className = 'text-center';
+                        td.textContent = 'Tidak ditemukan hasil untuk "' + searchText + '"';
+                        tr.appendChild(td);
+                        tbody.appendChild(tr);
+                        noDataRow = tr;
+                    }
+                } else if (noDataRow) {
+                    // Jika ada hasil, sembunyikan pesan "tidak ada data"
+                    noDataRow.style.display = 'none';
+                }
+            });
+        });
+    </script>
 </div>

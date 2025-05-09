@@ -8,6 +8,7 @@ use App\Models\KodeRekening;
 use App\Models\TahunAnggaran;
 use Livewire\WithPagination;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Index extends Component
 {
@@ -26,6 +27,15 @@ class Index extends Component
     
     protected $listeners = ['penerimaanDeleted' => '$refresh'];
     
+    // Tambahkan queryString untuk mempertahankan state filter saat paginasi
+    protected $queryString = [
+        'search' => ['except' => ''],
+        'tanggalMulai' => ['except' => ''],
+        'tanggalSelesai' => ['except' => ''],
+        'kodeRekeningId' => ['except' => ''],
+        'tahunAnggaranId' => ['except' => ''],
+    ];
+    
     public function mount()
     {
         $this->tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
@@ -37,11 +47,44 @@ class Index extends Component
         // Default tanggal filter (bulan ini)
         $this->tanggalMulai = Carbon::now()->startOfMonth()->format('Y-m-d');
         $this->tanggalSelesai = Carbon::now()->format('Y-m-d');
+        
+        // Log untuk debug
+        Log::info('Penerimaan Index mounted', [
+            'tahunAnggaranId' => $this->tahunAnggaranId,
+            'tanggalMulai' => $this->tanggalMulai,
+            'tanggalSelesai' => $this->tanggalSelesai
+        ]);
+    }
+    
+    // Trigger saat perubahan filter
+    public function updatedTahunAnggaranId()
+    {
+        $this->resetPage();
+        Log::info('Tahun Anggaran updated', ['tahunAnggaranId' => $this->tahunAnggaranId]);
+    }
+    
+    public function updatedKodeRekeningId()
+    {
+        $this->resetPage();
+        Log::info('Kode Rekening updated', ['kodeRekeningId' => $this->kodeRekeningId]);
+    }
+    
+    public function updatedTanggalMulai()
+    {
+        $this->resetPage();
+        Log::info('Tanggal Mulai updated', ['tanggalMulai' => $this->tanggalMulai]);
+    }
+    
+    public function updatedTanggalSelesai()
+    {
+        $this->resetPage();
+        Log::info('Tanggal Selesai updated', ['tanggalSelesai' => $this->tanggalSelesai]);
     }
     
     public function updatingSearch()
     {
         $this->resetPage();
+        Log::info('Search updating', ['search' => $this->search]);
     }
     
     public function resetFilter()
@@ -51,30 +94,44 @@ class Index extends Component
         $this->tanggalSelesai = Carbon::now()->format('Y-m-d');
         $this->kodeRekeningId = null;
         $this->resetPage();
+        
+        Log::info('Filter reset');
     }
     
     public function delete($id)
     {
         $penerimaan = Penerimaan::find($id);
-        $penerimaan->delete();
-        
-        session()->flash('message', 'Data penerimaan berhasil dihapus.');
-        $this->dispatch('penerimaanDeleted');
+        if ($penerimaan) {
+            $penerimaan->delete();
+            session()->flash('message', 'Data penerimaan berhasil dihapus.');
+            $this->dispatch('penerimaanDeleted');
+            Log::info('Penerimaan deleted', ['id' => $id]);
+        } else {
+            session()->flash('error', 'Data penerimaan tidak ditemukan.');
+            Log::warning('Failed to delete penerimaan', ['id' => $id]);
+        }
     }
     
     public function render()
     {
+        // Log untuk debug render
+        Log::info('Rendering with filters', [
+            'tahunAnggaranId' => $this->tahunAnggaranId,
+            'kodeRekeningId' => $this->kodeRekeningId,
+            'tanggalMulai' => $this->tanggalMulai,
+            'tanggalSelesai' => $this->tanggalSelesai,
+            'search' => $this->search
+        ]);
+        
         $query = Penerimaan::query();
         
+        // Apply filters
         if ($this->tahunAnggaranId) {
             $query->where('tahun_anggaran_id', $this->tahunAnggaranId);
         }
         
-        if ($this->search) {
-            $query->whereHas('kodeRekening', function($q) {
-                $q->where('kode', 'like', '%' . $this->search . '%')
-                  ->orWhere('nama', 'like', '%' . $this->search . '%');
-            })->orWhere('keterangan', 'like', '%' . $this->search . '%');
+        if ($this->kodeRekeningId) {
+            $query->where('kode_rekening_id', $this->kodeRekeningId);
         }
         
         if ($this->tanggalMulai) {
@@ -85,17 +142,28 @@ class Index extends Component
             $query->whereDate('tanggal', '<=', $this->tanggalSelesai);
         }
         
-        if ($this->kodeRekeningId) {
-            $query->where('kode_rekening_id', $this->kodeRekeningId);
+        // Perbaikan query pencarian
+        if ($this->search) {
+            $query->where(function($q) {
+                $q->whereHas('kodeRekening', function($q) {
+                    $q->where('kode', 'like', '%' . $this->search . '%')
+                      ->orWhere('nama', 'like', '%' . $this->search . '%');
+                })->orWhere('keterangan', 'like', '%' . $this->search . '%');
+            });
         }
         
         $penerimaan = $query->with('kodeRekening')
             ->orderBy('tanggal', 'desc')
             ->paginate(15);
         
+        // Log hasil query
+        Log::info('Query results', [
+            'count' => $penerimaan->total(),
+            'currentPage' => $penerimaan->currentPage()
+        ]);
+        
         return view('livewire.penerimaan.index', [
             'penerimaan' => $penerimaan
         ]);
     }
 }
-

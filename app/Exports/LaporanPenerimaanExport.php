@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Exports;
 
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -8,8 +9,8 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use Carbon\Carbon;
 
 class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyles, WithTitle, WithColumnWidths
@@ -19,14 +20,20 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
     protected $tanggalSelesai;
     protected $tahunAnggaran;
     protected $persentaseTarget;
+    protected $bulanAkhir; 
+    protected $viewMode; // Tambahkan property untuk mode tampilan
+    protected $bulanAwal; // Tambahkan property untuk bulan awal
     
-    public function __construct($data, $tanggalMulai, $tanggalSelesai, $tahunAnggaran, $persentaseTarget)
+    public function __construct($data, $tanggalMulai, $tanggalSelesai, $tahunAnggaran, $persentaseTarget, $viewMode = 'cumulative', $bulanAwal = 1)
     {
         $this->data = $data;
         $this->tanggalMulai = $tanggalMulai;
         $this->tanggalSelesai = $tanggalSelesai;
         $this->tahunAnggaran = $tahunAnggaran;
         $this->persentaseTarget = $persentaseTarget;
+        $this->bulanAkhir = Carbon::parse($tanggalSelesai)->month;
+        $this->viewMode = $viewMode;
+        $this->bulanAwal = $bulanAwal;
     }
     
     public function collection()
@@ -35,10 +42,13 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
         $periodeAwal = Carbon::parse($this->tanggalMulai)->format('d-m-Y');
         $periodeAkhir = Carbon::parse($this->tanggalSelesai)->format('d-m-Y');
         
+        // Mode tampilan untuk judul laporan
+        $modeTitle = $this->viewMode === 'specific' ? 'Triwulan Spesifik' : 'Kumulatif s/d Triwulan';
+        
         // Tambahkan header laporan
         $rows[] = ['LAPORAN REALISASI PENERIMAAN'];
         $rows[] = ['BPKPAD KOTA BANJARMASIN'];
-        $rows[] = ['Periode: ' . $periodeAwal . ' s/d ' . $periodeAkhir];
+        $rows[] = ['Periode: ' . $periodeAwal . ' s/d ' . $periodeAkhir . ' (Mode: ' . $modeTitle . ')'];
         $rows[] = []; // Baris kosong
         
         // Tambahkan header kolom
@@ -52,11 +62,12 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
             'Penerimaan per Rincian Objek Penerimaan'
         ];
         
-        // Tambahkan header bulan
-        $bulanAwal = Carbon::parse($this->tanggalMulai)->month;
-        $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
+        // Tentukan rentang bulan berdasarkan mode tampilan
+        $tampilkanDariBulan = $this->viewMode === 'specific' ? $this->bulanAwal : 1;
+        $tampilkanSampaiBulan = $this->bulanAkhir;
         
-        for ($i = 1; $i <= $bulanAkhir; $i++) {
+        // Tambahkan header bulan
+        for ($i = $tampilkanDariBulan; $i <= $tampilkanSampaiBulan; $i++) {
             $headers[] = Carbon::create()->month($i)->format('F');
         }
         
@@ -74,9 +85,9 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
                 $item['realisasi_sd_bulan_ini']
             ];
             
-            // Tambahkan data penerimaan per bulan
-            for ($i = 1; $i <= $bulanAkhir; $i++) {
-                $row[] = $item['penerimaan_per_bulan'][$i];
+            // Tambahkan data penerimaan per bulan berdasarkan mode
+            for ($i = $tampilkanDariBulan; $i <= $tampilkanSampaiBulan; $i++) {
+                $row[] = isset($item['penerimaan_per_bulan'][$i]) ? $item['penerimaan_per_bulan'][$i] : 0;
             }
             
             $rows[] = $row;
@@ -95,7 +106,13 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
     {
         // Styling untuk Excel
         $lastRow = count($this->data) + 5; // 5 baris header
-        $lastColumn = 7 + Carbon::parse($this->tanggalSelesai)->month; // 7 kolom awal + jumlah bulan
+        
+        // Hitung jumlah kolom berdasarkan mode tampilan
+        $tampilkanDariBulan = $this->viewMode === 'specific' ? $this->bulanAwal : 1;
+        $tampilkanSampaiBulan = $this->bulanAkhir;
+        $jumlahKolomBulan = $tampilkanSampaiBulan - $tampilkanDariBulan + 1;
+        
+        $lastColumn = 7 + $jumlahKolomBulan; // 7 kolom awal + jumlah bulan
         
         // Merge cells untuk judul
         $sheet->mergeCells('A1:' . $this->getColumnName($lastColumn) . '1');
@@ -156,10 +173,15 @@ class LaporanPenerimaanExport implements FromCollection, WithHeadings, WithStyle
             'G' => 20, // Penerimaan per Rincian Objek
         ];
         
-        // Tambahkan lebar untuk kolom bulan
-        $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
-        for ($i = 1; $i <= $bulanAkhir; $i++) {
-            $widths[$this->getColumnName(7 + $i - 1)] = 15; // Kolom bulan
+        // Tentukan rentang bulan berdasarkan mode tampilan
+        $tampilkanDariBulan = $this->viewMode === 'specific' ? $this->bulanAwal : 1;
+        $tampilkanSampaiBulan = $this->bulanAkhir;
+        
+        // Count untuk kolom bulan
+        $colIndex = 7;
+        for ($i = $tampilkanDariBulan; $i <= $tampilkanSampaiBulan; $i++) {
+            $widths[$this->getColumnName($colIndex)] = 15;
+            $colIndex++;
         }
         
         return $widths;

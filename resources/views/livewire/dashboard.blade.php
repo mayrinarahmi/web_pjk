@@ -43,6 +43,16 @@
                         <small class="text-muted">{{ $persentasePendapatan }}% dari target</small>
                         <small class="text-muted">Target: Rp {{ number_format($targetPendapatan, 0, ',', '.') }}</small>
                     </div>
+                    <!-- Tambahan: Pagu Anggaran -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Pagu Anggaran:</small>
+                        <small class="text-muted">Rp {{ number_format($paguAnggaran, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Kurang dari Target -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Kurang dari Target:</small>
+                        <small class="text-muted">Rp {{ number_format(max(0, $targetPendapatan - $totalPendapatan), 0, ',', '.') }}</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -68,6 +78,16 @@
                     <div class="d-flex justify-content-between">
                         <small class="text-muted">{{ $persentasePAD }}% dari target</small>
                         <small class="text-muted">Target: Rp {{ number_format($targetPAD, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Pagu Anggaran -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Pagu Anggaran:</small>
+                        <small class="text-muted">Rp {{ number_format($paguPAD, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Kurang dari Target -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Kurang dari Target:</small>
+                        <small class="text-muted">Rp {{ number_format(max(0, $targetPAD - $totalPAD), 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>
@@ -98,6 +118,16 @@
                         <small class="text-muted">{{ $persentasePendapatanTransfer }}% dari target</small>
                         <small class="text-muted">Target: Rp {{ number_format($targetPendapatanTransfer, 0, ',', '.') }}</small>
                     </div>
+                    <!-- Tambahan: Pagu Anggaran -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Pagu Anggaran:</small>
+                        <small class="text-muted">Rp {{ number_format($paguTransfer, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Kurang dari Target -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Kurang dari Target:</small>
+                        <small class="text-muted">Rp {{ number_format(max(0, $targetPendapatanTransfer - $totalPendapatanTransfer), 0, ',', '.') }}</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -123,6 +153,16 @@
                     <div class="d-flex justify-content-between">
                         <small class="text-muted">{{ $persentaseLainLain }}% dari target</small>
                         <small class="text-muted">Target: Rp {{ number_format($targetLainLain, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Pagu Anggaran -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Pagu Anggaran:</small>
+                        <small class="text-muted">Rp {{ number_format($paguLainLain, 0, ',', '.') }}</small>
+                    </div>
+                    <!-- Tambahan: Kurang dari Target -->
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Kurang dari Target:</small>
+                        <small class="text-muted">Rp {{ number_format(max(0, $targetLainLain - $totalLainLain), 0, ',', '.') }}</small>
                     </div>
                 </div>
             </div>
@@ -206,152 +246,93 @@
                                         position: 'top'
                                     }
                                 });
-                                
                                 chart.render();
-                                
-                                // Update chart saat event updateCharts dipicu
-                                window.addEventListener('updateCharts', function(event) {
-                                    if (event.detail && event.detail.dataBulanan) {
-                                        const newData = event.detail.dataBulanan;
-                                        chart.updateSeries([
-                                            {
-                                                name: 'PENDAPATAN ASLI DAERAH (PAD)',
-                                                data: newData.map(item => item.pad || 0)
-                                            },
-                                            {
-                                                name: 'PENDAPATAN TRANSFER',
-                                                data: newData.map(item => item.transfer || 0)
-                                            },
-                                            {
-                                                name: 'LAIN-LAIN PENDAPATAN DAERAH YANG SAH',
-                                                data: newData.map(item => item.lainlain || 0)
-                                            }
-                                        ]);
-                                    }
-                                });
-                                
-                                document.addEventListener('livewire:navigated', function() {
-                                    chart.destroy();
-                                });
-                            })
-                         "></div>
-                </div>
-            </div>
-        </div>
+                               
+                               // Update chart saat event updateCharts dipicu
+                               window.addEventListener('updateCharts', function(event) {
+                                   if (event.detail && event.detail.dataBulanan) {
+                                       const newData = event.detail.dataBulanan;
+                                       chart.updateSeries([
+                                           {
+                                               name: 'PENDAPATAN ASLI DAERAH (PAD)',
+                                               data: newData.map(item => item.pad || 0)
+                                           },
+                                           {
+                                               name: 'PENDAPATAN TRANSFER',
+                                               data: newData.map(item => item.transfer || 0)
+                                           },
+                                           {
+                                               name: 'LAIN-LAIN PENDAPATAN DAERAH YANG SAH',
+                                               data: newData.map(item => item.lainlain || 0)
+                                           }
+                                       ]);
+                                   }
+                               });
+                               
+                               document.addEventListener('livewire:navigated', function() {
+                                   chart.destroy();
+                               });
+                           })
+                        "></div>
+               </div>
+           </div>
+       </div>
+   </div>
 
-        <!-- <div class="col-lg-4 col-md-12 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Distribusi Penerimaan</h5>
-                </div>
-                <div class="card-body">
-                   
-                    <div id="revenueDistributionChart" 
-                         style="height: 300px;"
-                         x-data="{}"
-                         x-init="
-                            $nextTick(() => {
-                                if (typeof ApexCharts === 'undefined') {
-                                    console.error('ApexCharts tidak tersedia');
-                                    return;
-                                }
-                                
-                                const chart = new ApexCharts($el, {
-                                    series: {{ json_encode(array_column($dataKategori, 'total')) }},
-                                    chart: {
-                                        height: 300,
-                                        type: 'donut',
-                                    },
-                                    labels: {{ json_encode(array_column($dataKategori, 'nama')) }},
-                                    responsive: [{
-                                        breakpoint: 480,
-                                        options: {
-                                            chart: {
-                                                width: 200
-                                            },
-                                            legend: {
-                                                position: 'bottom'
-                                            }
-                                        }
-                                    }],
-                                    colors: ['#696cff', '#03c3ec', '#71dd37'],
-                                    tooltip: {
-                                        y: {
-                                            formatter: function (val) {
-                                                return 'Rp ' + val.toLocaleString('id-ID')
-                                            }
-                                        }
-                                    },
-                                });
-                                
-                                chart.render();
-                                
-                                // Update chart saat event updateCharts dipicu
-                                window.addEventListener('updateCharts', function(event) {
-                                    if (event.detail && event.detail.dataKategori) {
-                                        chart.updateSeries(event.detail.dataKategori.map(item => item.total));
-                                    }
-                                });
-                                
-                                document.addEventListener('livewire:navigated', function() {
-                                    chart.destroy();
-                                });
-                            })
-                         "></div>
-                </div>
-            </div>
-        </div>
-    </div> -->
-
-    <!-- Tabel Kategori -->
-    <div class="row">
-        <div class="col-12 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Realisasi per Kategori</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Kategori</th>
-                                    <th class="text-end">Target</th>
-                                    <th class="text-end">Realisasi</th>
-                                    <th class="text-end">Persentase</th>
-                                    <th>Progress</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($dataKategori as $kategori)
-                                <tr>
-                                    <td>{{ $kategori['nama'] }}</td>
-                                    <td class="text-end">Rp {{ number_format($kategori['target'], 0, ',', '.') }}</td>
-                                    <td class="text-end">Rp {{ number_format($kategori['total'], 0, ',', '.') }}</td>
-                                    <td class="text-end">{{ $kategori['persentase'] }}%</td>
-                                    <td>
-                                        <div class="progress" style="height: 6px;">
-                                            <div class="progress-bar 
-                                                @if(strpos($kategori['nama'], 'ASLI') !== false) bg-primary 
-                                                @elseif(strpos($kategori['nama'], 'TRANSFER') !== false) bg-info 
-                                                @else bg-warning @endif" 
-                                                role="progressbar" 
-                                                style="width: {{ min($kategori['persentase'], 100) }}%" 
-                                                aria-valuenow="{{ $kategori['persentase'] }}" 
-                                                aria-valuemin="0" 
-                                                aria-valuemax="100">
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+   <!-- Tabel Kategori - PERBAIKAN -->
+   <div class="row">
+       <div class="col-12 mb-4">
+           <div class="card">
+               <div class="card-header d-flex justify-content-between align-items-center">
+                   <h5 class="card-title mb-0">Realisasi per Kategori</h5>
+                   <small class="text-muted">Persentase Target: {{ $persentaseTarget }}%</small>
+               </div>
+               <div class="card-body">
+                   <div class="table-responsive">
+                       <table class="table table-hover">
+                           <thead>
+                               <tr>
+                                   <th>Kategori</th>
+                                   <th class="text-end">Pagu Anggaran</th>
+                                   <th class="text-end">Target</th>
+                                   <th class="text-end">Realisasi</th>
+                                   <th class="text-end">Kurang dr Target</th>
+                                   <th class="text-end">Persentase</th>
+                                   <th>Progress</th>
+                               </tr>
+                           </thead>
+                           <tbody>
+                               @foreach($dataKategori as $kategori)
+                               <tr>
+                                   <td>{{ $kategori['nama'] }}</td>
+                                   <td class="text-end">Rp {{ number_format($kategori['pagu'], 0, ',', '.') }}</td>
+                                   <td class="text-end">Rp {{ number_format($kategori['target'], 0, ',', '.') }}</td>
+                                   <td class="text-end">Rp {{ number_format($kategori['total'], 0, ',', '.') }}</td>
+                                   <td class="text-end">Rp {{ number_format(max(0, $kategori['kurangDariTarget']), 0, ',', '.') }}</td>
+                                   <td class="text-end">{{ $kategori['persentase'] }}%</td>
+                                   <td>
+                                       <div class="progress" style="height: 6px;">
+                                           <div class="progress-bar 
+                                               @if(strpos($kategori['nama'], 'ASLI') !== false) bg-primary 
+                                               @elseif(strpos($kategori['nama'], 'TRANSFER') !== false) bg-info 
+                                               @else bg-warning @endif" 
+                                               role="progressbar" 
+                                               style="width: {{ min($kategori['persentase'], 100) }}%" 
+                                               aria-valuenow="{{ $kategori['persentase'] }}" 
+                                               aria-valuemin="0" 
+                                               aria-valuemax="100">
+                                           </div>
+                                       </div>
+                                   </td>
+                               </tr>
+                               @endforeach
+                           </tbody>
+                       </table>
+                   </div>
+               </div>
+           </div>
+       </div>
+   </div>
 </div>
 
 <!-- Pastikan hanya satu instance ApexCharts yang dimuat -->
@@ -363,35 +344,35 @@
 <!-- Script untuk event handler Dashboard -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Debug library ApexCharts
-    if (typeof ApexCharts === 'undefined') {
-        console.error('ApexCharts library tidak tersedia!');
-    } else {
-        console.log('ApexCharts library tersedia, versi:', ApexCharts.version);
-    }
-    
-    // Debug Alpine.js
-    if (typeof Alpine === 'undefined') {
-        console.error('Alpine.js library tidak tersedia!');
-    } else {
-        document.addEventListener('alpine:init', () => {
-            console.log('Alpine.js siap digunakan');
-        });
-    }
-    
-    // Tambahkan event listener untuk Livewire
-    if (typeof Livewire !== 'undefined') {
-        Livewire.on('dashboardUpdated', (data) => {
-            console.log('Event dashboardUpdated diterima:', data);
-            
-            // Trigger event untuk update chart Alpine
-            window.dispatchEvent(new CustomEvent('updateCharts', {
-                detail: {
-                    dataBulanan: data.dataBulanan,
-                    dataKategori: data.dataKategori
-                }
-            }));
-        });
-    }
+   // Debug library ApexCharts
+   if (typeof ApexCharts === 'undefined') {
+       console.error('ApexCharts library tidak tersedia!');
+   } else {
+       console.log('ApexCharts library tersedia, versi:', ApexCharts.version);
+   }
+   
+   // Debug Alpine.js
+   if (typeof Alpine === 'undefined') {
+       console.error('Alpine.js library tidak tersedia!');
+   } else {
+       document.addEventListener('alpine:init', () => {
+           console.log('Alpine.js siap digunakan');
+       });
+   }
+   
+   // Tambahkan event listener untuk Livewire
+   if (typeof Livewire !== 'undefined') {
+       Livewire.on('dashboardUpdated', (data) => {
+           console.log('Event dashboardUpdated diterima:', data);
+           
+           // Trigger event untuk update chart Alpine
+           window.dispatchEvent(new CustomEvent('updateCharts', {
+               detail: {
+                   dataBulanan: data.dataBulanan,
+                   dataKategori: data.dataKategori
+               }
+           }));
+       });
+   }
 });
 </script>
