@@ -1,14 +1,12 @@
 <?php
-
 namespace App\Models;
-
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 
 class TargetPeriode extends Model
 {
     protected $table = 'target_periode';
-    
+   
     protected $fillable = [
         'tahun_anggaran_id',
         'nama_periode',
@@ -16,58 +14,85 @@ class TargetPeriode extends Model
         'bulan_akhir',
         'persentase',
     ];
-    
+   
     public function tahunAnggaran()
     {
         return $this->belongsTo(TahunAnggaran::class);
     }
-    
-    // Fungsi untuk mendapatkan persentase target untuk bulan tertentu
+   
+    // Fungsi untuk mendapatkan persentase target untuk bulan tertentu (non-kumulatif)
     public static function getPersentaseForBulan($tahunAnggaranId, $bulan)
     {
         $periode = self::where('tahun_anggaran_id', $tahunAnggaranId)
             ->where('bulan_awal', '<=', $bulan)
             ->where('bulan_akhir', '>=', $bulan)
             ->first();
-        
+       
         return $periode ? $periode->persentase : 0;
     }
     
+    // FUNGSI BARU: Mendapatkan persentase kumulatif sampai bulan tertentu
+    public static function getPersentaseKumulatif($tahunAnggaranId, $bulanAkhir)
+    {
+        // Ambil semua periode dari awal tahun sampai bulan yang diminta
+        $periodes = self::where('tahun_anggaran_id', $tahunAnggaranId)
+            ->where('bulan_awal', '<=', $bulanAkhir)
+            ->orderBy('bulan_awal')
+            ->get();
+        
+        $totalPersentase = 0;
+        
+        foreach ($periodes as $periode) {
+            // Jika periode berakhir sebelum atau pada bulan yang diminta, ambil semua persentasenya
+            if ($periode->bulan_akhir <= $bulanAkhir) {
+                $totalPersentase += $periode->persentase;
+            } else {
+                // Jika periode melewati bulan yang diminta, hitung proporsinya
+                $jumlahBulanDalamPeriode = $periode->bulan_akhir - $periode->bulan_awal + 1;
+                $jumlahBulanTerhitung = $bulanAkhir - $periode->bulan_awal + 1;
+                $proporsi = $jumlahBulanTerhitung / $jumlahBulanDalamPeriode;
+                $totalPersentase += $periode->persentase * $proporsi;
+            }
+        }
+        
+        return $totalPersentase;
+    }
+   
     public static function getPersentaseForWeek($tahunAnggaranId, $tanggalSelesai)
-{
-    // Hitung berapa minggu di tahun ini sampai tanggal tersebut
-    $tanggal = Carbon::parse($tanggalSelesai);
-    $bulan = $tanggal->month;
-    $mingguDalamBulan = ceil($tanggal->day / 7);
-    
-    // Cari periode yang mencakup bulan ini
-    $periode = self::where('tahun_anggaran_id', $tahunAnggaranId)
-        ->where('bulan_awal', '<=', $bulan)
-        ->where('bulan_akhir', '>=', $bulan)
-        ->first();
-    
-    if (!$periode) {
-        return 0;
+    {
+        // Hitung berapa minggu di tahun ini sampai tanggal tersebut
+        $tanggal = Carbon::parse($tanggalSelesai);
+        $bulan = $tanggal->month;
+        $mingguDalamBulan = ceil($tanggal->day / 7);
+       
+        // Cari periode yang mencakup bulan ini
+        $periode = self::where('tahun_anggaran_id', $tahunAnggaranId)
+            ->where('bulan_awal', '<=', $bulan)
+            ->where('bulan_akhir', '>=', $bulan)
+            ->first();
+       
+        if (!$periode) {
+            return 0;
+        }
+       
+        // Hitung jumlah total minggu dalam periode
+        $totalMinggu = 0;
+        for ($i = $periode->bulan_awal; $i <= $periode->bulan_akhir; $i++) {
+            $totalMinggu += Carbon::createFromDate($tanggal->year, $i, 1)->daysInMonth / 7;
+        }
+       
+        // Hitung jumlah minggu yang sudah berlalu dalam periode
+        $mingguBerlalu = 0;
+        for ($i = $periode->bulan_awal; $i < $bulan; $i++) {
+            $mingguBerlalu += Carbon::createFromDate($tanggal->year, $i, 1)->daysInMonth / 7;
+        }
+        $mingguBerlalu += $mingguDalamBulan;
+       
+        // Hitung persentase secara proporsional
+        $proporsi = $mingguBerlalu / $totalMinggu;
+        return $periode->persentase * $proporsi;
     }
     
-    // Hitung jumlah total minggu dalam periode
-    $totalMinggu = 0;
-    for ($i = $periode->bulan_awal; $i <= $periode->bulan_akhir; $i++) {
-        $totalMinggu += Carbon::createFromDate($tanggal->year, $i, 1)->daysInMonth / 7;
-    }
-    
-    // Hitung jumlah minggu yang sudah berlalu dalam periode
-    $mingguBerlalu = 0;
-    for ($i = $periode->bulan_awal; $i < $bulan; $i++) {
-        $mingguBerlalu += Carbon::createFromDate($tanggal->year, $i, 1)->daysInMonth / 7;
-    }
-    $mingguBerlalu += $mingguDalamBulan;
-    
-    // Hitung persentase secara proporsional
-    $proporsi = $mingguBerlalu / $totalMinggu;
-    return $periode->persentase * $proporsi;
-}
-
     // Fungsi untuk validasi overlap periode
     public static function isOverlap($tahunAnggaranId, $bulanAwal, $bulanAkhir, $excludeId = null)
     {
@@ -88,12 +113,12 @@ class TargetPeriode extends Model
                        ->where('bulan_akhir', '<=', $bulanAkhir);
                 });
             });
-        
+       
         // Exclude ID yang sedang diedit
         if ($excludeId) {
             $query->where('id', '!=', $excludeId);
         }
-        
+       
         return $query->exists();
     }
 }

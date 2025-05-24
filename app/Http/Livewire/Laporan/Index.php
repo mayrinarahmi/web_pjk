@@ -52,11 +52,16 @@ class Index extends Component
         }
     }
     
-    // Metode bantu untuk mendapatkan persentase target
+    // Metode bantu untuk mendapatkan persentase target - DIPERBAIKI
     private function getTargetPersentase($bulanAkhir)
     {
-        // Gunakan TargetPeriode untuk mendapatkan persentase
-        return TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
+        // Jika mode kumulatif, gunakan persentase kumulatif
+        if ($this->viewMode === 'cumulative') {
+            return TargetPeriode::getPersentaseKumulatif($this->tahunAnggaranId, $bulanAkhir);
+        } else {
+            // Mode specific: gunakan persentase periode saja
+            return TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
+        }
     }
 
     public function setCustomFilter($tipeFilter, $tanggalMulai, $tanggalSelesai)
@@ -73,7 +78,7 @@ class Index extends Component
         $this->updateDateRangeBasedOnFilter();
     }
     
-    // Metode baru untuk update rentang tanggal berdasarkan filter dan mode
+    // Metode baru untuk update rentang tanggal berdasarkan filter dan mode - DIPERBAIKI
     private function updateDateRangeBasedOnFilter()
     {
         $tahunSekarang = Carbon::now()->year;
@@ -150,7 +155,7 @@ class Index extends Component
                 break;
         }
         
-        // Update persentase target berdasarkan tanggal selesai
+        // Update persentase target berdasarkan mode dan tanggal selesai
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         $this->persentaseTarget = $this->getTargetPersentase($bulanAkhir);
     }
@@ -226,11 +231,12 @@ class Index extends Component
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         $bulanAwal = Carbon::parse($this->tanggalMulai)->month;
 
-        // Ambil persentase target berdasarkan tipe filter
+        // Ambil persentase target berdasarkan mode dan tipe filter - DIPERBAIKI
         if (strpos($this->tipeFilter, 'minggu') !== false) {
             $persentaseTarget = TargetPeriode::getPersentaseForWeek($this->tahunAnggaranId, $this->tanggalSelesai);
         } else {
-            $persentaseTarget = TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
+            // Gunakan method getTargetPersentase yang sudah diperbaiki
+            $persentaseTarget = $this->getTargetPersentase($bulanAkhir);
         }
 
         $this->persentaseTarget = round($persentaseTarget, 2);
