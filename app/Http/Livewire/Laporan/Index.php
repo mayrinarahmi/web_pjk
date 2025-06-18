@@ -27,7 +27,7 @@ class Index extends Component
     public function mount()
     {
         $this->tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
-        $activeTahun = TahunAnggaran::where('is_active', true)->first();
+         $activeTahun = TahunAnggaran::getActive();
         $this->tahunAnggaranId = $activeTahun ? $activeTahun->id : null;
         
         // Default tanggal (bulan ini)
@@ -283,10 +283,9 @@ class Index extends Component
                     $dataPerKode[$kode->id]['target_anggaran'] = $targetData->jumlah;
                 }
                 
-                // Ambil data penerimaan
+                // PERBAIKAN: Update query penerimaan menggunakan 'tahun' bukan 'tahun_anggaran_id'
                 $query = Penerimaan::where('kode_rekening_id', $kode->id)
-                    ->where('tahun_anggaran_id', $this->tahunAnggaranId)
-                    ->whereYear('tanggal', $tahun);
+                    ->where('tahun', $tahun); // Ganti dari tahun_anggaran_id ke tahun
                 
                 // Sesuaikan rentang tanggal berdasarkan mode tampilan
                 if ($this->viewMode === 'specific') {

@@ -49,7 +49,12 @@ class Edit extends Component
         $this->bulan_akhir = $targetPeriode->bulan_akhir;
         $this->persentase = $targetPeriode->persentase;
         
-        $this->tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
+        // PERBAIKAN: Ambil tahun yang unik saja, prioritaskan APBD Murni
+        $this->tahunAnggaran = TahunAnggaran::select('tahun')
+            ->selectRaw('MIN(id) as id') // Ambil ID terkecil (biasanya Murni)
+            ->groupBy('tahun')
+            ->orderBy('tahun', 'desc')
+            ->get();
     }
     
     public function update()

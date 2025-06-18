@@ -83,7 +83,8 @@
     
     <!-- Main JS -->
     <script src="{{ asset('sneat-template/assets/js/main.js') }}"></script>
-    
+    <!-- Di layout sebelum </body> -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <!-- Livewire Scripts -->
     @livewireScripts
     

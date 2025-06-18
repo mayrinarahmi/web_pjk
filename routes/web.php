@@ -3,6 +3,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use App\Http\Livewire\Dashboard;
+//use App\Http\Livewire\TrenAnalisis;
+
+// use App\Http\Controllers\TrendAnalysisController;
 use App\Http\Livewire\KodeRekening\Index as KodeRekeningIndex;
 use App\Http\Livewire\KodeRekening\Create as KodeRekeningCreate;
 use App\Http\Livewire\KodeRekening\Edit as KodeRekeningEdit;
@@ -12,6 +15,11 @@ use App\Http\Livewire\TargetBulan\Edit as TargetBulanEdit;
 use App\Http\Livewire\TargetAnggaran\Index as TargetAnggaranIndex;
 use App\Http\Livewire\TargetAnggaran\Create as TargetAnggaranCreate;
 use App\Http\Livewire\TargetAnggaran\Edit as TargetAnggaranEdit;
+// TAMBAHAN: Import Target Periode
+use App\Http\Controllers\Api\TrendAnalysisController;
+use App\Http\Livewire\TargetPeriode\Index as TargetPeriodeIndex;
+use App\Http\Livewire\TargetPeriode\Create as TargetPeriodeCreate;
+use App\Http\Livewire\TargetPeriode\Edit as TargetPeriodeEdit;
 use App\Http\Livewire\Penerimaan\Index as PenerimaanIndex;
 use App\Http\Livewire\Penerimaan\Create as PenerimaanCreate;
 use App\Http\Livewire\Penerimaan\Edit as PenerimaanEdit;
@@ -23,6 +31,7 @@ use App\Http\Controllers\BackupController;
 use App\Http\Livewire\TahunAnggaran\Index as TahunAnggaranIndex;
 use App\Http\Livewire\TahunAnggaran\Create as TahunAnggaranCreate;
 use App\Http\Livewire\TahunAnggaran\Edit as TahunAnggaranEdit;
+
 
 // Route untuk halaman utama - cek apakah user sudah login
 Route::get('/', function () {
@@ -76,6 +85,13 @@ Route::middleware('auth')->group(function () {
 
     // Route yang bisa diakses oleh semua user yang sudah login
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
+    // routes/web.php
+    // Route::get('/trend-simple', \App\Http\Livewire\SimpleTrendChart::class)
+    // ->middleware('auth')
+    Route::get('/trend-analysis', function() {
+        return view('trend-analysis');
+    })->name('trend-analysis');
+
     Route::get('/laporan', LaporanIndex::class)->name('laporan.index');
 
     // === ROUTES UNTUK ADMINISTRATOR ===
@@ -103,6 +119,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/kode-rekening', KodeRekeningIndex::class)->name('kode-rekening.index');
         Route::get('/kode-rekening/create', KodeRekeningCreate::class)->name('kode-rekening.create');
         Route::get('/kode-rekening/{id}/edit', KodeRekeningEdit::class)->name('kode-rekening.edit');
+       
+Route::get('/kode-rekening/template', function() {
+    return response()->download(public_path('templates/template_kode_rekening.xlsx'));
+})->name('kode-rekening.template');
         
         // Target Bulan routes
         Route::get('/target-bulan', TargetBulanIndex::class)->name('target-bulan.index');
@@ -114,14 +134,33 @@ Route::middleware('auth')->group(function () {
         Route::get('/target-anggaran/create', TargetAnggaranCreate::class)->name('target-anggaran.create');
         Route::get('/target-anggaran/{id}/edit', TargetAnggaranEdit::class)->name('target-anggaran.edit');
         
-        // Target Periode Routes
-Route::get('/target-periode', App\Http\Livewire\TargetPeriode\Index::class)->name('target-periode.index');
-Route::get('/target-periode/create', App\Http\Livewire\TargetPeriode\Create::class)->name('target-periode.create');
-Route::get('/target-periode/{id}/edit', App\Http\Livewire\TargetPeriode\Edit::class)->name('target-periode.edit');
+        // PERBAIKAN: Target Periode Routes - gunakan alias import yang konsisten
+        Route::get('/target-periode', TargetPeriodeIndex::class)->name('target-periode.index');
+        Route::get('/target-periode/create', TargetPeriodeCreate::class)->name('target-periode.create');
+        Route::get('/target-periode/{id}/edit', TargetPeriodeEdit::class)->name('target-periode.edit');
 
         // Penerimaan routes
         Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
         Route::get('/penerimaan/create', PenerimaanCreate::class)->name('penerimaan.create');
         Route::get('/penerimaan/{id}/edit', PenerimaanEdit::class)->name('penerimaan.edit');
+       
+       
+// Trend Analysis Routes
+Route::prefix('trend-analysis')->group(function () {
+    Route::get('/overview', [TrendAnalysisController::class, 'overview']);
+    Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
+    Route::get('/search', [TrendAnalysisController::class, 'search']);
+    Route::get('/seasonal', [TrendAnalysisController::class, 'seasonal']);
+    Route::get('/month-comparison', [TrendAnalysisController::class, 'monthComparison']);
+    Route::post('/clear-cache', [TrendAnalysisController::class, 'clearCache']);
+});
+
+// Alternative route group if you prefer the old URL structure
+Route::prefix('trend')->group(function () {
+    Route::get('/overview', [TrendAnalysisController::class, 'overview']);
+    Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
+    Route::get('/search', [TrendAnalysisController::class, 'search']);
+});
+
     });
 });

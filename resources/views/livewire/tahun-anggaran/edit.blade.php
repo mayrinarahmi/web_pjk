@@ -8,14 +8,48 @@
         </div>
         <div class="card-body">
             <form wire:submit.prevent="update">
+                <div class="alert alert-info">
+                    <i class="bx bx-info-circle"></i> 
+                    Jenis Anggaran: <strong>{{ $tahunAnggaranData->jenis_anggaran == 'murni' ? 'APBD MURNI' : 'APBD PERUBAHAN' }}</strong>
+                    @if($tahunAnggaranData->parent)
+                        <br>Referensi dari: {{ $tahunAnggaranData->parent->display_name }}
+                    @endif
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="tahun" class="form-label">Tahun <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control @error('tahun') is-invalid @enderror" 
+                                id="tahun" wire:model="tahun" placeholder="Masukkan tahun">
+                            @error('tahun')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="tanggal_penetapan" class="form-label">Tanggal Penetapan</label>
+                            <input type="date" class="form-control @error('tanggal_penetapan') is-invalid @enderror" 
+                                id="tanggal_penetapan" wire:model="tanggal_penetapan">
+                            @error('tanggal_penetapan')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="mb-3">
-                    <label for="tahun" class="form-label">Tahun</label>
-                    <input type="number" class="form-control @error('tahun') is-invalid @enderror" id="tahun" wire:model="tahun" placeholder="Masukkan tahun">
-                    @error('tahun')
+                    <label for="keterangan" class="form-label">Keterangan</label>
+                    <textarea class="form-control @error('keterangan') is-invalid @enderror" 
+                        id="keterangan" wire:model="keterangan" rows="3" 
+                        placeholder="Masukkan keterangan (opsional)"></textarea>
+                    @error('keterangan')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
-                
+               
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="is_active" wire:model="is_active">
@@ -24,10 +58,16 @@
                         </label>
                     </div>
                 </div>
-                
+               
                 <div class="text-end">
                     <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
-                        <i class="bx bx-save"></i> Simpan Perubahan
+                        <span wire:loading.remove>
+                            <i class="bx bx-save"></i> Simpan Perubahan
+                        </span>
+                        <span wire:loading>
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Menyimpan...
+                        </span>
                     </button>
                 </div>
             </form>

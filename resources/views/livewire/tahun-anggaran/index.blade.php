@@ -3,16 +3,23 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Daftar Tahun Anggaran</h5>
             <a href="{{ route('tahun-anggaran.create') }}" class="btn btn-primary btn-sm">
-                <i class="bx bx-plus"></i> Tambah Tahun Anggaran
+                <i class="bx bx-plus"></i> Tambah APBD Murni
             </a>
         </div>
         <div class="card-body">
             <div class="row mb-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="input-group">
                         <span class="input-group-text"><i class="bx bx-search"></i></span>
-                        <input type="text" class="form-control" placeholder="Cari..." wire:model.live.debounce.300ms="search">
+                        <input type="text" class="form-control" placeholder="Cari tahun..." wire:model.live.debounce.300ms="search">
                     </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" wire:model.live="filterJenis">
+                        <option value="">Semua Jenis</option>
+                        <option value="murni">APBD Murni</option>
+                        <option value="perubahan">APBD Perubahan</option>
+                    </select>
                 </div>
             </div>
             
@@ -32,7 +39,7 @@
             @endif
             
             <!-- Loading indicator -->
-            <div wire:loading wire:target="search, setActive, delete" class="mb-3">
+            <div wire:loading wire:target="search, setActive, delete, createPerubahan, filterJenis" class="mb-3">
                 <div class="d-flex align-items-center text-primary">
                     <div class="spinner-border spinner-border-sm me-2" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -46,9 +53,12 @@
                     <thead class="table-light">
                         <tr>
                             <th width="5%">No</th>
-                            <th>Tahun</th>
-                            <th width="15%">Status</th>
-                            <th width="20%">Aksi</th>
+                            <th width="10%">Tahun</th>
+                            <th width="15%">Jenis</th>
+                            <th width="15%">Tanggal Penetapan</th>
+                            <th width="20%">Keterangan</th>
+                            <th width="10%">Status</th>
+                            <th width="25%">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -57,45 +67,66 @@
                             <td>{{ $tahunAnggaran->firstItem() + $key }}</td>
                             <td>{{ $ta->tahun }}</td>
                             <td>
-                                @if($ta->is_active)
-                                <span class="badge bg-success">AKTIF</span>
+                                @if($ta->jenis_anggaran == 'murni')
+                                    <span class="badge bg-primary">APBD MURNI</span>
                                 @else
-                                <span class="badge bg-secondary">TIDAK AKTIF</span>
+                                    <span class="badge bg-warning">APBD PERUBAHAN</span>
+                                    @if($ta->parent)
+                                        <br><small class="text-muted">dari: {{ $ta->parent->tahun }} Murni</small>
+                                    @endif
                                 @endif
                             </td>
                             <td>
-                                <!-- Perbaikan: Menggunakan layout yang konsisten untuk tombol aksi -->
-                                <div class="action-container">
+                                {{ $ta->tanggal_penetapan ? $ta->tanggal_penetapan->format('d-m-Y') : '-' }}
+                            </td>
+                            <td>{{ $ta->keterangan ?? '-' }}</td>
+                            <td>
+                                @if($ta->is_active)
+                                    <span class="badge bg-success">AKTIF</span>
+                                @else
+                                    <span class="badge bg-secondary">TIDAK AKTIF</span>
+                                @endif
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
                                     @if(!$ta->is_active)
-                                    <div class="action-wrapper">
-                                        <button type="button" class="btn btn-success btn-sm action-button" wire:click="setActive({{ $ta->id }})" wire:loading.attr="disabled">
-                                            <i class="bx bx-check"></i> Aktifkan
+                                        <button type="button" class="btn btn-success" 
+                                            wire:click="setActive({{ $ta->id }})" 
+                                            wire:loading.attr="disabled"
+                                            title="Aktifkan">
+                                            <i class="bx bx-check"></i>
                                         </button>
-                                    </div>
-                                    @else
-                                    <div class="action-wrapper"></div> <!-- Placeholder untuk menjaga layout -->
                                     @endif
                                     
-                                    <div class="action-wrapper">
-                                        <a href="{{ route('tahun-anggaran.edit', $ta->id) }}" class="btn btn-primary btn-sm action-button">
-                                            <i class="bx bx-edit"></i> Edit
-                                        </a>
-                                    </div>
-                                    
-                                    <div class="action-wrapper">
-                                        <button type="button" class="btn btn-danger btn-sm action-button" 
-                                            onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()" 
-                                            wire:click="delete({{ $ta->id }})" 
-                                            wire:loading.attr="disabled">
-                                            <i class="bx bx-trash"></i> Hapus
+                                    @if($ta->jenis_anggaran == 'murni' && !$ta->perubahan->count())
+                                        <button type="button" class="btn btn-warning" 
+                                            wire:click="createPerubahan({{ $ta->id }})"
+                                            wire:loading.attr="disabled"
+                                            onclick="confirm('Apakah Anda yakin ingin membuat APBD Perubahan untuk tahun {{ $ta->tahun }}? Semua target anggaran akan dicopy.') || event.stopImmediatePropagation()"
+                                            title="Buat APBD Perubahan">
+                                            <i class="bx bx-copy"></i> Perubahan
                                         </button>
-                                    </div>
+                                    @endif
+                                    
+                                    <a href="{{ route('tahun-anggaran.edit', $ta->id) }}" 
+                                        class="btn btn-primary"
+                                        title="Edit">
+                                        <i class="bx bx-edit"></i>
+                                    </a>
+                                    
+                                    <button type="button" class="btn btn-danger" 
+                                        onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()" 
+                                        wire:click="delete({{ $ta->id }})" 
+                                        wire:loading.attr="disabled"
+                                        title="Hapus">
+                                        <i class="bx bx-trash"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="4" class="text-center">Tidak ada data</td>
+                            <td colspan="7" class="text-center">Tidak ada data</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -107,39 +138,4 @@
             </div>
         </div>
     </div>
-
-    <style>
-    /* CSS untuk konsistensi tombol */
-    .action-container {
-        display: flex;
-        gap: 8px;
-        justify-content: flex-start;
-    }
-    
-    .action-wrapper {
-        width: 100px;
-        min-width: 100px;
-    }
-    
-    .action-button {
-        width: 100%;
-    }
-    
-    /* Memastikan tombol memiliki tinggi yang sama */
-    .btn-sm {
-        height: 31px;
-        padding-top: 4px;
-        padding-bottom: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    /* Pastikan badge status memiliki lebar yang konsisten */
-    .badge-fixed-width {
-        min-width: 80px;
-        display: inline-block;
-        text-align: center;
-    }
-    </style>
 </div>

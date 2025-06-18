@@ -1,10 +1,30 @@
 <div>
+    {{-- Flash Messages --}}
+    @if (session()->has('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+    
+    @if (session()->has('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Struktur Hierarki Kode Rekening</h5>
-            <a href="{{ route('kode-rekening.create') }}" class="btn btn-primary btn-sm">
-                <i class="bx bx-plus"></i> Tambah Kode Rekening
-            </a>
+            <div>
+                <button wire:click="toggleImportModal" class="btn btn-success btn-sm me-2">
+                    <i class="bx bx-upload"></i> Import Excel
+                </button>
+                <a href="{{ route('kode-rekening.create') }}" class="btn btn-primary btn-sm">
+                    <i class="bx bx-plus"></i> Tambah Kode Rekening
+                </a>
+            </div>
         </div>
         <div class="card-body">
             <div class="row mb-3">
@@ -55,6 +75,85 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Import Excel -->
+  <!-- Modal Import Excel -->
+@if($showImportModal)
+<div class="modal fade show" style="display: block;" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document"> <!-- Ubah ke modal-lg untuk lebih lebar -->
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Kode Rekening dari Excel</h5>
+                <button type="button" class="btn-close" wire:click="toggleImportModal" aria-label="Close"></button>
+            </div>
+            <form wire:submit.prevent="import">
+                <div class="modal-body">
+                    <!-- Tampilkan error jika ada -->
+                    @if(count($importErrors) > 0)
+                        <div class="alert alert-danger">
+                            <h6>Error saat import:</h6>
+                            <ul class="mb-0">
+                                @foreach($importErrors as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+                    
+                    <div class="alert alert-info">
+                        <h6>Format Excel yang dibutuhkan:</h6>
+                        <ul class="mb-0">
+                            <li>Header harus <strong>huruf kecil</strong>: kode, nama, level</li>
+                            <li>Kolom A: <strong>kode</strong> (contoh: 4, 4.1, 4.1.01)</li>
+                            <li>Kolom B: <strong>nama</strong></li>
+                            <li>Kolom C: <strong>level</strong> (1-6)</li>
+                        </ul>
+                        <small class="text-muted">* Semua kode akan diimport dengan status aktif</small>
+                        <div class="mt-2">
+                            <button type="button" wire:click="downloadTemplate" class="btn btn-sm btn-primary">
+                                <i class="bx bx-download"></i> Download Template
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Pilih File Excel</label>
+                        <input type="file" class="form-control @error('importFile') is-invalid @enderror" 
+                               id="importFile" wire:model="importFile" accept=".xlsx,.xls">
+                        @error('importFile')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    
+                    <div wire:loading wire:target="importFile" class="text-primary">
+                        <i class="bx bx-loader-alt bx-spin"></i> Mengupload file...
+                    </div>
+                    
+                    <!-- Tips tambahan -->
+                    <div class="alert alert-warning mt-3">
+                        <h6>Tips:</h6>
+                        <ul class="mb-0 small">
+                            <li>Pastikan data parent sudah ada sebelum import child</li>
+                            <li>Contoh: Import kode "4" dulu sebelum "4.1"</li>
+                            <li>Jika ada error, cek format kolom dan pastikan headers huruf kecil</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" wire:click="toggleImportModal">Batal</button>
+                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
+                        <span wire:loading.remove wire:target="import">Import</span>
+                        <span wire:loading wire:target="import">
+                            <i class="bx bx-loader-alt bx-spin"></i> Memproses...
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade show"></div>
+@endif
 
     <!-- Script untuk pencarian di tampilan hierarki -->
     <script>

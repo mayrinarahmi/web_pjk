@@ -23,6 +23,14 @@
             </a>
         </li>
 
+
+<li class="menu-item {{ request()->routeIs('trend-analysis') ? 'active' : '' }}">
+    <a href="{{ route('trend-analysis') }}" class="menu-link">
+        <i class="menu-icon tf-icons bx bx-line-chart"></i>
+        <div>Trend Analysis</div>
+    </a>
+</li>
+
         <!-- Master Data -->
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Master Data</span>

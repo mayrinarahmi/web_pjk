@@ -16,11 +16,14 @@
                 <div class="col-md-3">
                     <label for="tahunAnggaranId" class="form-label">Tahun Anggaran</label>
                     <select wire:model="tahunAnggaranId" id="tahunAnggaranId" class="form-select">
-                        <option value="">Pilih Tahun Anggaran</option>
-                        @foreach($tahunAnggaran as $ta)
-                            <option value="{{ $ta->id }}">{{ $ta->tahun }}</option>
-                        @endforeach
-                    </select>
+    <option value="">Pilih Tahun Anggaran</option>
+    @foreach($tahunAnggaran as $ta)
+        <option value="{{ $ta->id }}">
+            {{ $ta->tahun }} - {{ $ta->jenis_anggaran == 'murni' ? 'MURNI' : 'PERUBAHAN' }}
+            {{ $ta->is_active ? '(AKTIF)' : '' }}
+        </option>
+    @endforeach
+</select>
                 </div>
                 <div class="col-md-3">
                     <label for="tanggalMulai" class="form-label">Tanggal Mulai</label>

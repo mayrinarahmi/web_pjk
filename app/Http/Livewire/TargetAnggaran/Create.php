@@ -19,6 +19,8 @@ class Create extends Component
         'jumlah' => 'required|numeric|min:0',
     ];
     
+    protected $listeners = ['targetCreated' => '$refresh'];
+    
     public function mount()
     {
         $activeTahun = TahunAnggaran::where('is_active', true)->first();
@@ -56,15 +58,29 @@ class Create extends Component
             session()->flash('message', 'Target anggaran berhasil ditambahkan.');
         }
         
+        // Update hierarki setelah menyimpan
+        try {
+            KodeRekening::updateHierarchiTargets($this->tahunAnggaranId);
+            session()->flash('message', session('message') . ' Hierarki target otomatis diperbarui.');
+        } catch (\Exception $e) {
+            session()->flash('warning', 'Target tersimpan, tetapi gagal memperbarui hierarki: ' . $e->getMessage());
+        }
+        
+        // Emit event untuk refresh parent component
+        $this->dispatch('targetCreated');
+        
         return redirect()->route('target-anggaran.index');
     }
     
     public function render()
     {
-        $tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
+        $tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')
+            ->orderBy('jenis_anggaran', 'asc')
+            ->get();
         
         // Hanya tampilkan kode rekening level 5
         $kodeRekening = KodeRekening::where('level', 5)
+            ->where('is_active', true)
             ->orderBy('kode', 'asc')
             ->get();
             

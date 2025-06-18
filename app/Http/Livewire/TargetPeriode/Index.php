@@ -17,9 +17,20 @@ class Index extends Component
     
     public function mount()
     {
-        $this->tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
+        // PERBAIKAN: Ambil tahun yang unik saja, prioritaskan APBD Murni
+        $this->tahunAnggaran = TahunAnggaran::select('tahun')
+            ->selectRaw('MIN(id) as id') // Ambil ID terkecil (biasanya Murni)
+            ->groupBy('tahun')
+            ->orderBy('tahun', 'desc')
+            ->get();
+            
+        // Set default ke tahun dari APBD yang aktif
         $activeTahun = TahunAnggaran::where('is_active', true)->first();
-        $this->tahunAnggaranId = $activeTahun ? $activeTahun->id : null;
+        if ($activeTahun) {
+            // Cari tahun yang sama di list tahunAnggaran
+            $selectedTahun = $this->tahunAnggaran->where('tahun', $activeTahun->tahun)->first();
+            $this->tahunAnggaranId = $selectedTahun ? $selectedTahun->id : null;
+        }
     }
     
     public function delete($id)

@@ -10,7 +10,8 @@
             <div class="row mb-3">
                 <div class="col-md-4">
                     <label for="tahunAnggaranId" class="form-label">Tahun Anggaran</label>
-                    <select wire:model="tahunAnggaranId" id="tahunAnggaranId" class="form-select">
+                    <!-- PERBAIKAN: Tambah .live untuk reactive update -->
+                    <select wire:model.live="tahunAnggaranId" id="tahunAnggaranId" class="form-select">
                         <option value="">Pilih Tahun Anggaran</option>
                         @foreach($tahunAnggaran as $ta)
                             <option value="{{ $ta->id }}">{{ $ta->tahun }}</option>
