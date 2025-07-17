@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use App\Exports\LaporanPenerimaanExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\DB;
 
 class Index extends Component
 {
@@ -283,26 +284,59 @@ class Index extends Component
                     $dataPerKode[$kode->id]['target_anggaran'] = $targetData->jumlah;
                 }
                 
-                // PERBAIKAN: Update query penerimaan menggunakan 'tahun' bukan 'tahun_anggaran_id'
-                $query = Penerimaan::where('kode_rekening_id', $kode->id)
-                    ->where('tahun', $tahun); // Ganti dari tahun_anggaran_id ke tahun
+                // PERUBAHAN UTAMA: Ambil nilai terakhir per bulan untuk sistem kumulatif
+                // Query untuk mendapatkan penerimaan terakhir per bulan
+                $penerimaanPerBulanQuery = Penerimaan::select(
+                        DB::raw('MONTH(tanggal) as bulan'),
+                        DB::raw('MAX(tanggal) as tanggal_terakhir')
+                    )
+                    ->where('kode_rekening_id', $kode->id)
+                    ->where('tahun', $tahun)
+                    ->whereDate('tanggal', '<=', $this->tanggalSelesai)
+                    ->groupBy('bulan');
                 
-                // Sesuaikan rentang tanggal berdasarkan mode tampilan
+                // Jika mode specific, batasi juga tanggal mulai
                 if ($this->viewMode === 'specific') {
-                    // Mode spesifik: hanya dalam rentang tanggal tertentu
-                    $query->whereDate('tanggal', '>=', $this->tanggalMulai)
-                        ->whereDate('tanggal', '<=', $this->tanggalSelesai);
-                } else {
-                    // Mode kumulatif: dari awal tahun sampai tanggal selesai
-                    $query->whereDate('tanggal', '<=', $this->tanggalSelesai);
+                    $penerimaanPerBulanQuery->whereDate('tanggal', '>=', $this->tanggalMulai);
                 }
                 
-                $penerimaan = $query->get();
+                $tanggalTerakhirPerBulan = $penerimaanPerBulanQuery->get();
                 
-                foreach ($penerimaan as $p) {
-                    $bulan = $p->tanggal->month;
-                    $dataPerKode[$kode->id]['penerimaan_per_bulan'][$bulan] += $p->jumlah;
-                    $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] += $p->jumlah;
+                // Ambil nilai penerimaan untuk setiap tanggal terakhir per bulan
+                foreach ($tanggalTerakhirPerBulan as $item) {
+                    $penerimaan = Penerimaan::where('kode_rekening_id', $kode->id)
+                        ->where('tahun', $tahun)
+                        ->whereDate('tanggal', $item->tanggal_terakhir)
+                        ->orderBy('id', 'desc') // Jika ada multiple entry di tanggal yang sama, ambil yang terakhir
+                        ->first();
+                    
+                    if ($penerimaan) {
+                        $bulan = $item->bulan;
+                        $dataPerKode[$kode->id]['penerimaan_per_bulan'][$bulan] = $penerimaan->jumlah;
+                    }
+                }
+                
+                // Hitung realisasi sampai dengan bulan ini
+                // Untuk mode kumulatif, ambil nilai terakhir yang ada
+                if ($this->viewMode === 'cumulative') {
+                    // Cari penerimaan terakhir sampai dengan tanggal selesai
+                    $penerimaanTerakhir = Penerimaan::where('kode_rekening_id', $kode->id)
+                        ->where('tahun', $tahun)
+                        ->whereDate('tanggal', '<=', $this->tanggalSelesai)
+                        ->orderBy('tanggal', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    
+                    if ($penerimaanTerakhir) {
+                        $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] = $penerimaanTerakhir->jumlah;
+                    }
+                } else {
+                    // Mode specific: jumlahkan nilai per bulan dalam rentang
+                    $totalRealisasi = 0;
+                    for ($i = $bulanAwal; $i <= $bulanAkhir; $i++) {
+                        $totalRealisasi += $dataPerKode[$kode->id]['penerimaan_per_bulan'][$i];
+                    }
+                    $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] = $totalRealisasi;
                 }
             }
         }
@@ -324,7 +358,7 @@ class Index extends Component
                         // Tambahkan realisasi
                         $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] += $childData['realisasi_sd_bulan_ini'];
                         
-                        // Tambahkan penerimaan per bulan
+                        // Untuk penerimaan per bulan, jumlahkan dari children
                         for ($i = 1; $i <= 12; $i++) {
                             $dataPerKode[$kode->id]['penerimaan_per_bulan'][$i] += $childData['penerimaan_per_bulan'][$i];
                         }

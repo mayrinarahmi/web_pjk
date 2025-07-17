@@ -2,14 +2,21 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Daftar Penerimaan</h5>
+            {{-- Tombol Import & Create - Hide untuk Viewer --}}
+            @canany(['create-penerimaan', 'import-penerimaan'])
             <div class="d-flex gap-2">
+                @can('import-penerimaan')
                 <button type="button" class="btn btn-success btn-sm" wire:click="openImportModal">
                     <i class="bx bx-upload"></i> Import Excel
                 </button>
+                @endcan
+                @can('create-penerimaan')
                 <a href="{{ route('penerimaan.create') }}" class="btn btn-primary btn-sm">
                     <i class="bx bx-plus"></i> Tambah Penerimaan
                 </a>
+                @endcan
             </div>
+            @endcanany
         </div>
         <div class="card-body">
             <!-- Filter Section -->
@@ -114,7 +121,10 @@
                             <th width="8%">Tahun</th>
                             <th width="15%">Jumlah</th>
                             <th width="15%">Keterangan</th>
+                            {{-- Kolom Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-penerimaan', 'delete-penerimaan'])
                             <th width="7%">Aksi</th>
+                            @endcanany
                         </tr>
                     </thead>
                     <tbody>
@@ -135,13 +145,18 @@
                                 <strong>Rp {{ number_format($p->jumlah, 0, ',', '.') }}</strong>
                             </td>
                             <td>{{ $p->keterangan ?? '-' }}</td>
+                            {{-- Tombol Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-penerimaan', 'delete-penerimaan'])
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
+                                    @can('edit-penerimaan')
                                     <a href="{{ route('penerimaan.edit', $p->id) }}" 
                                         class="btn btn-primary"
                                         title="Edit">
                                         <i class="bx bx-edit"></i>
                                     </a>
+                                    @endcan
+                                    @can('delete-penerimaan')
                                     <button type="button" class="btn btn-danger" 
                                         onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()" 
                                         wire:click="delete({{ $p->id }})" 
@@ -149,12 +164,14 @@
                                         title="Hapus">
                                         <i class="bx bx-trash"></i>
                                     </button>
+                                    @endcan
                                 </div>
                             </td>
+                            @endcanany
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-4">
+                            <td colspan="{{ auth()->user()->canany(['edit-penerimaan', 'delete-penerimaan']) ? '8' : '7' }}" class="text-center py-4">
                                 @if($tahun || $kodeRekeningId || $tanggalMulai || $tanggalSelesai || $search)
                                     <div class="text-muted">
                                         <i class="bx bx-search-alt-2 fs-1 mb-2"></i>
@@ -175,9 +192,11 @@
                                     <div class="text-muted">
                                         <i class="bx bx-data fs-1 mb-2"></i>
                                         <p>Belum ada data penerimaan.</p>
+                                        @can('create-penerimaan')
                                         <a href="{{ route('penerimaan.create') }}" class="btn btn-primary btn-sm">
                                             <i class="bx bx-plus"></i> Tambah Data Pertama
                                         </a>
+                                        @endcan
                                     </div>
                                 @endif
                             </td>
@@ -213,7 +232,8 @@
         </div>
     </div>
     
-    <!-- Import Modal -->
+    <!-- Import Modal - Hanya tampil jika user punya permission import -->
+    @can('import-penerimaan')
     <div class="modal fade @if($showImportModal) show @endif" 
          tabindex="-1" 
          style="display: @if($showImportModal) block @else none @endif;" 
@@ -334,4 +354,5 @@
     @if($showImportModal)
         <div class="modal-backdrop fade show"></div>
     @endif
+    @endcan
 </div>

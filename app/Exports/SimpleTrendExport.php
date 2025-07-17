@@ -82,7 +82,8 @@ class SimpleTrendExport implements FromArray, WithHeadings, WithStyles, WithColu
         return [
             1 => [
                 'font' => ['bold' => true],
-                'fill' => [
+                '
+                fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
                     'startColor' => ['rgb' => 'E7E7E7']
                 ]

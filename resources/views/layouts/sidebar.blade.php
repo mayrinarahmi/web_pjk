@@ -15,105 +15,138 @@
     <div class="menu-inner-shadow"></div>
 
     <ul class="menu-inner py-1">
-        <!-- Dashboard -->
+        <!-- Dashboard - Semua user bisa akses -->
+        @can('view-dashboard')
         <li class="menu-item {{ request()->routeIs('dashboard.*') ? 'active' : '' }}">
-        <a href="{{ route('dashboard') }}" class="menu-link" onclick="window.location.href='{{ route('dashboard') }}'; return false;">
+            <a href="{{ route('dashboard') }}" class="menu-link" onclick="window.location.href='{{ route('dashboard') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-home-circle"></i>
                 <div data-i18n="Analytics">Dashboard</div>
             </a>
         </li>
+        @endcan
 
+        <!-- Trend Analysis - Semua user bisa akses -->
+        @can('view-trend-analysis')
+        <li class="menu-item {{ request()->routeIs('trend-analysis') ? 'active' : '' }}">
+            <a href="{{ route('trend-analysis') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-line-chart"></i>
+                <div>Trend Analysis</div>
+            </a>
+        </li>
+        @endcan
 
-<li class="menu-item {{ request()->routeIs('trend-analysis') ? 'active' : '' }}">
-    <a href="{{ route('trend-analysis') }}" class="menu-link">
-        <i class="menu-icon tf-icons bx bx-line-chart"></i>
-        <div>Trend Analysis</div>
-    </a>
-</li>
-
-        <!-- Master Data -->
+        <!-- Master Data - UBAH: Viewer juga bisa lihat -->
+        @if(auth()->user()->hasAnyRole(['Administrator', 'Operator', 'Viewer']))
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Master Data</span>
         </li>
         
-
+        @canany(['view-tahun-anggaran', 'create-tahun-anggaran'])
         <li class="menu-item {{ request()->routeIs('tahun-anggaran.*') ? 'active' : '' }}">
-    <a href="{{ route('tahun-anggaran.index') }}" class="menu-link" onclick="window.location.href='{{ route('tahun-anggaran.index') }}'; return false;">
-        <!-- <li class="menu-item {{ request()->routeIs('tahun-anggaran.*') ? 'active open' : '' }}">
-            <a href="{{ route('tahun-anggaran.index') }}" class="menu-link" wire:navigate> -->
+            <a href="{{ route('tahun-anggaran.index') }}" class="menu-link" onclick="window.location.href='{{ route('tahun-anggaran.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-calendar"></i>
                 <div data-i18n="Tahun Anggaran">Tahun Anggaran</div>
             </a>
         </li>
+        @endcanany
         
+        @canany(['view-kode-rekening', 'create-kode-rekening'])
         <li class="menu-item {{ request()->routeIs('kode-rekening.*') ? 'active' : '' }}">
-        <a href="{{ route('kode-rekening.index') }}" class="menu-link" onclick="window.location.href='{{ route('kode-rekening.index') }}'; return false;">
+            <a href="{{ route('kode-rekening.index') }}" class="menu-link" onclick="window.location.href='{{ route('kode-rekening.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-code-block"></i>
                 <div data-i18n="Kode Rekening">Kode Rekening</div>
             </a>
         </li>
+        @endcanany
 
-        <!-- <li class="menu-item {{ request()->routeIs('target-bulan.*') ? 'active' : '' }}">
-        <a href="{{ route('target-bulan.index') }}" class="menu-link" onclick="window.location.href='{{ route('target-bulan.index') }}'; return false;">
-                <i class="menu-icon tf-icons bx bx-target-lock"></i>
-                <div data-i18n="Target Kelompok Bulan">Target Kelompok Bulan</div> -->
-            </a>
-        </li>
-        
+        @canany(['view-target', 'create-target'])
         <li class="menu-item {{ request()->routeIs('target-periode.*') ? 'active' : '' }}">
-        <a href="{{ route('target-periode.index') }}" class="menu-link" onclick="window.location.href='{{ route('target-periode.index') }}'; return false;">
+            <a href="{{ route('target-periode.index') }}" class="menu-link" onclick="window.location.href='{{ route('target-periode.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-target-lock"></i>
                 <div data-i18n="Target Periode">Target Periode</div>
             </a>
         </li>
+        @endcanany
         
+        @canany(['view-target', 'create-target'])
         <li class="menu-item {{ request()->routeIs('target-anggaran.*') ? 'active' : '' }}">
-        <a href="{{ route('target-anggaran.index') }}" class="menu-link" onclick="window.location.href='{{ route('target-anggaran.index') }}'; return false;">
+            <a href="{{ route('target-anggaran.index') }}" class="menu-link" onclick="window.location.href='{{ route('target-anggaran.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-money"></i>
                 <div data-i18n="Target Anggaran">Pagu Anggaran</div>
             </a>
         </li>
+        @endcanany
+        @endif
 
-        <!-- Transaksi -->
+        <!-- Transaksi - UBAH: Viewer juga bisa lihat -->
+        @if(auth()->user()->hasAnyRole(['Administrator', 'Operator', 'Viewer']))
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Transaksi</span>
         </li>
         
+        @canany(['view-penerimaan', 'create-penerimaan'])
         <li class="menu-item {{ request()->routeIs('penerimaan.*') ? 'active' : '' }}">
-        <a href="{{ route('penerimaan.index') }}" class="menu-link" onclick="window.location.href='{{ route('penerimaan.index') }}'; return false;">
+            <a href="{{ route('penerimaan.index') }}" class="menu-link" onclick="window.location.href='{{ route('penerimaan.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-receipt"></i>
                 <div data-i18n="Penerimaan">Penerimaan</div>
             </a>
         </li>
+        @endcanany
+        @endif
 
-        <!-- Laporan -->
+        <!-- Laporan - Semua user bisa akses -->
+        @can('view-laporan')
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Laporan</span>
         </li>
         
         <li class="menu-item {{ request()->routeIs('laporan.*') ? 'active' : '' }}">
-        <a href="{{ route('laporan.index') }}" class="menu-link" onclick="window.location.href='{{ route('laporan.index') }}'; return false;">
+            <a href="{{ route('laporan.index') }}" class="menu-link" onclick="window.location.href='{{ route('laporan.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-file"></i>
                 <div data-i18n="Laporan Realisasi">Laporan Realisasi</div>
             </a>
         </li>
+        @endcan
 
-        <!-- Pengaturan
+        <!-- Pengaturan - Hanya Operator -->
+        @role('Operator')
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Pengaturan</span>
         </li>
+        
+        @can('view-users')
         <li class="menu-item {{ request()->routeIs('user.*') ? 'active' : '' }}">
-        <a href="{{ route('user.index') }}" class="menu-link" onclick="window.location.href='{{ route('user.index') }}'; return false;">
+            <a href="{{ route('user.index') }}" class="menu-link" onclick="window.location.href='{{ route('user.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-user"></i>
                 <div data-i18n="Pengguna">Pengguna</div>
             </a>
         </li>
+        @endcan
         
-<li class="menu-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">
-        <a href="{{ route('backup.index') }}" class="menu-link" onclick="window.location.href='{{ route('backup.index') }}'; return false;">
+        @can('manage-backup')
+        <li class="menu-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">
+            <a href="{{ route('backup.index') }}" class="menu-link" onclick="window.location.href='{{ route('backup.index') }}'; return false;">
                 <i class="menu-icon tf-icons bx bx-data"></i>
                 <div data-i18n="Backup & Restore">Backup & Restore</div>
             </a>
-        </li> -->
+        </li>
+        @endcan
+        @endrole
+        
+        <!-- Backup untuk Administrator -->
+        @role('Administrator')
+        <!-- @can('manage-backup')
+        <li class="menu-header small text-uppercase">
+            <span class="menu-header-text">Pengaturan</span>
+        </li>
+        
+        <li class="menu-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">
+            <a href="{{ route('backup.index') }}" class="menu-link" onclick="window.location.href='{{ route('backup.index') }}'; return false;">
+                <i class="menu-icon tf-icons bx bx-data"></i>
+                <div data-i18n="Backup & Restore">Backup & Restore</div>
+            </a>
+        </li>
+        @endcan -->
+        @endrole
     </ul>
 </aside>

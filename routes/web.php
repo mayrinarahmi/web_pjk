@@ -85,82 +85,85 @@ Route::middleware('auth')->group(function () {
 
     // Route yang bisa diakses oleh semua user yang sudah login
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
-    // routes/web.php
-    // Route::get('/trend-simple', \App\Http\Livewire\SimpleTrendChart::class)
-    // ->middleware('auth')
+    
     Route::get('/trend-analysis', function() {
         return view('trend-analysis');
     })->name('trend-analysis');
 
     Route::get('/laporan', LaporanIndex::class)->name('laporan.index');
 
-    // === ROUTES UNTUK ADMINISTRATOR ===
-    Route::middleware('role:Administrator')->group(function () {
+    // === ROUTES UNTUK OPERATOR SAJA (Full Access termasuk User Management) ===
+    Route::middleware('role:Operator')->group(function () {
+        // User Management routes - DIPINDAH KE OPERATOR
         Route::get('/user', UserIndex::class)->name('user.index');
         Route::get('/user/create', UserCreate::class)->name('user.create');
         Route::get('/user/{id}/edit', UserEdit::class)->name('user.edit');
-        
-        // Backup routes
+    });
+
+    // === ROUTES UNTUK ADMINISTRATOR DAN OPERATOR (tapi bukan Viewer) ===
+    Route::middleware('role:Administrator,Operator')->group(function () {
+        // Backup routes - Administrator dan Operator bisa akses
         Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
         Route::get('/backup/create', [BackupController::class, 'create'])->name('backup.create');
         Route::get('/backup/download/{fileName}', [BackupController::class, 'download'])->name('backup.download');
         Route::get('/backup/delete/{fileName}', [BackupController::class, 'delete'])->name('backup.delete');
         Route::get('/backup/restore/{fileName}', [BackupController::class, 'restore'])->name('backup.restore');
-    });
-
-    // === ROUTES UNTUK ADMINISTRATOR DAN OPERATOR ===
-    Route::middleware('role:Administrator,Operator')->group(function () {
-        // Tahun Anggaran routes
-        Route::get('/tahun-anggaran', TahunAnggaranIndex::class)->name('tahun-anggaran.index');
+        
+        // Tahun Anggaran routes - Create/Edit hanya Admin dan Operator
         Route::get('/tahun-anggaran/create', TahunAnggaranCreate::class)->name('tahun-anggaran.create');
         Route::get('/tahun-anggaran/{id}/edit', TahunAnggaranEdit::class)->name('tahun-anggaran.edit');
         
-        // Kode Rekening routes
-        Route::get('/kode-rekening', KodeRekeningIndex::class)->name('kode-rekening.index');
+        // Kode Rekening routes - Create/Edit hanya Admin dan Operator
         Route::get('/kode-rekening/create', KodeRekeningCreate::class)->name('kode-rekening.create');
         Route::get('/kode-rekening/{id}/edit', KodeRekeningEdit::class)->name('kode-rekening.edit');
-       
-Route::get('/kode-rekening/template', function() {
-    return response()->download(public_path('templates/template_kode_rekening.xlsx'));
-})->name('kode-rekening.template');
         
-        // Target Bulan routes
-        Route::get('/target-bulan', TargetBulanIndex::class)->name('target-bulan.index');
+        // Target Bulan routes - Create/Edit hanya Admin dan Operator
         Route::get('/target-bulan/create', TargetBulanCreate::class)->name('target-bulan.create');
         Route::get('/target-bulan/{id}/edit', TargetBulanEdit::class)->name('target-bulan.edit');
         
-        // Target Anggaran routes
-        Route::get('/target-anggaran', TargetAnggaranIndex::class)->name('target-anggaran.index');
+        // Target Anggaran routes - Create/Edit hanya Admin dan Operator
         Route::get('/target-anggaran/create', TargetAnggaranCreate::class)->name('target-anggaran.create');
         Route::get('/target-anggaran/{id}/edit', TargetAnggaranEdit::class)->name('target-anggaran.edit');
         
-        // PERBAIKAN: Target Periode Routes - gunakan alias import yang konsisten
-        Route::get('/target-periode', TargetPeriodeIndex::class)->name('target-periode.index');
+        // Target Periode Routes - Create/Edit hanya Admin dan Operator
         Route::get('/target-periode/create', TargetPeriodeCreate::class)->name('target-periode.create');
         Route::get('/target-periode/{id}/edit', TargetPeriodeEdit::class)->name('target-periode.edit');
 
-        // Penerimaan routes
-        Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
+        // Penerimaan routes - Create/Edit hanya Admin dan Operator
         Route::get('/penerimaan/create', PenerimaanCreate::class)->name('penerimaan.create');
         Route::get('/penerimaan/{id}/edit', PenerimaanEdit::class)->name('penerimaan.edit');
-       
-       
-// Trend Analysis Routes
-Route::prefix('trend-analysis')->group(function () {
-    Route::get('/overview', [TrendAnalysisController::class, 'overview']);
-    Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
-    Route::get('/search', [TrendAnalysisController::class, 'search']);
-    Route::get('/seasonal', [TrendAnalysisController::class, 'seasonal']);
-    Route::get('/month-comparison', [TrendAnalysisController::class, 'monthComparison']);
-    Route::post('/clear-cache', [TrendAnalysisController::class, 'clearCache']);
-});
+    });
 
-// Alternative route group if you prefer the old URL structure
-Route::prefix('trend')->group(function () {
-    Route::get('/overview', [TrendAnalysisController::class, 'overview']);
-    Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
-    Route::get('/search', [TrendAnalysisController::class, 'search']);
-});
+    // === ROUTES UNTUK SEMUA USER YANG LOGIN (termasuk Viewer untuk VIEW only) ===
+    Route::middleware('role:Administrator,Operator,Viewer')->group(function () {
+        // Index/View routes - Semua role bisa akses untuk LIHAT
+        Route::get('/tahun-anggaran', TahunAnggaranIndex::class)->name('tahun-anggaran.index');
+        Route::get('/kode-rekening', KodeRekeningIndex::class)->name('kode-rekening.index');
+        Route::get('/target-bulan', TargetBulanIndex::class)->name('target-bulan.index');
+        Route::get('/target-anggaran', TargetAnggaranIndex::class)->name('target-anggaran.index');
+        Route::get('/target-periode', TargetPeriodeIndex::class)->name('target-periode.index');
+        Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
+        
+        // Template download - Viewer juga bisa download template
+        Route::get('/kode-rekening/template', function() {
+            return response()->download(public_path('templates/template_kode_rekening.xlsx'));
+        })->name('kode-rekening.template');
+        
+        // Trend Analysis Routes - Semua bisa akses
+        Route::prefix('trend-analysis')->group(function () {
+            Route::get('/overview', [TrendAnalysisController::class, 'overview']);
+            Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
+            Route::get('/search', [TrendAnalysisController::class, 'search']);
+            Route::get('/seasonal', [TrendAnalysisController::class, 'seasonal']);
+            Route::get('/month-comparison', [TrendAnalysisController::class, 'monthComparison']);
+            Route::post('/clear-cache', [TrendAnalysisController::class, 'clearCache']);
+        });
 
+        // Alternative route group if you prefer the old URL structure
+        Route::prefix('trend')->group(function () {
+            Route::get('/overview', [TrendAnalysisController::class, 'overview']);
+            Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
+            Route::get('/search', [TrendAnalysisController::class, 'search']);
+        });
     });
 });

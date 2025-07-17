@@ -2,9 +2,12 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Daftar Kode Rekening</h5>
+            {{-- Tombol Tambah - Hide untuk Viewer --}}
+            @can('create-kode-rekening')
             <a href="{{ route('kode-rekening.create') }}" class="btn btn-primary btn-sm">
                 <i class="bx bx-plus"></i> Tambah Kode Rekening
             </a>
+            @endcan
         </div>
         <div class="card-body">
             <!-- Form pencarian super sederhana -->
@@ -41,7 +44,10 @@
                             <th>Nama</th>
                             <th width="10%">Level</th>
                             <th width="10%">Status</th>
+                            {{-- Kolom Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-kode-rekening', 'delete-kode-rekening'])
                             <th width="20%">Aksi</th>
+                            @endcanany
                         </tr>
                     </thead>
                     <tbody>
@@ -58,20 +64,27 @@
                                     <span class="badge bg-secondary">Tidak Aktif</span>
                                 @endif
                             </td>
+                            {{-- Tombol Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-kode-rekening', 'delete-kode-rekening'])
                             <td>
                                 <div class="btn-group" role="group">
+                                    @can('edit-kode-rekening')
                                     <a href="{{ route('kode-rekening.edit', $kode->id) }}" class="btn btn-primary btn-sm">
                                         <i class="bx bx-edit"></i> Edit
                                     </a>
+                                    @endcan
+                                    @can('delete-kode-rekening')
                                     <button type="button" class="btn btn-danger btn-sm" onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()" wire:click="delete({{ $kode->id }})" wire:loading.attr="disabled">
                                         <i class="bx bx-trash"></i> Hapus
                                     </button>
+                                    @endcan
                                 </div>
                             </td>
+                            @endcanany
                         </tr>
                         @empty
                         <tr class="no-data-row">
-                            <td colspan="6" class="text-center">Tidak ada data</td>
+                            <td colspan="{{ auth()->user()->canany(['edit-kode-rekening', 'delete-kode-rekening']) ? '6' : '5' }}" class="text-center">Tidak ada data</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -139,7 +152,8 @@
                         const tr = document.createElement('tr');
                         tr.className = 'no-data-row';
                         const td = document.createElement('td');
-                        td.colSpan = 6;
+                        {{-- Dynamic colspan based on permissions --}}
+                        td.colSpan = {{ auth()->user()->canany(['edit-kode-rekening', 'delete-kode-rekening']) ? '6' : '5' }};
                         td.className = 'text-center';
                         td.textContent = 'Tidak ditemukan hasil untuk "' + searchText + '"';
                         tr.appendChild(td);

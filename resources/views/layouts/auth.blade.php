@@ -6,7 +6,8 @@
     <title>Pajak Daerah - BKPAD Banjarmasin</title>
     
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{{ asset('sneat-template/assets/img/favicon/favicon.ico') }}" />
+     <link rel="icon" type="image/png" href="{{ asset('images/silapat-favicon.png') }}" />
+    <!-- <link rel="icon" type="image/x-icon" href="{{ asset('sneat-template/assets/img/favicon/favicon.ico') }}" /> -->
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

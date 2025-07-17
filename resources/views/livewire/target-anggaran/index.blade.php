@@ -2,13 +2,20 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Daftar Target Anggaran</h5>
+            {{-- Tombol Actions - Hide untuk Viewer --}}
+            @canany(['create-target', 'import-target', 'edit-target'])
             <div class="btn-group">
+                @can('import-target')
                 <button type="button" class="btn btn-success btn-sm" wire:click="toggleImportModal">
                     <i class="bx bx-upload"></i> Import Excel
                 </button>
+                @endcan
+                @can('create-target')
                 <a href="{{ route('target-anggaran.create') }}" class="btn btn-primary btn-sm">
                     <i class="bx bx-plus"></i> Tambah Target Anggaran
                 </a>
+                @endcan
+                @can('edit-target')
                 <button type="button" class="btn btn-info btn-sm" wire:click="updateHierarchi" wire:loading.attr="disabled">
                     <span wire:loading.remove wire:target="updateHierarchi">
                         <i class="bx bx-refresh"></i> Update Hierarki
@@ -17,7 +24,9 @@
                         <span class="spinner-border spinner-border-sm me-1"></span> Updating...
                     </span>
                 </button>
+                @endcan
             </div>
+            @endcanany
         </div>
         <div class="card-body">
             <!-- Info tentang tahun anggaran aktif -->
@@ -133,7 +142,10 @@
                             <th width="10%">Level</th>
                             <th width="20%">Pagu Anggaran</th>
                             <th width="5%">Status</th>
+                            {{-- Kolom Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-target', 'create-target'])
                             <th width="10%">Aksi</th>
+                            @endcanany
                         </tr>
                     </thead>
                     <tbody>
@@ -174,6 +186,8 @@
                                     @endif
                                 @endif
                             </td>
+                            {{-- Tombol Aksi - Hide untuk Viewer --}}
+                            @canany(['edit-target', 'create-target'])
                             <td>
                                 @if($kr->level == 5 && $tahunAnggaranId)
                                     @php
@@ -183,22 +197,27 @@
                                     @endphp
                                     
                                     @if($targetAnggaranObj)
+                                        @can('edit-target')
                                         <a href="{{ route('target-anggaran.edit', $targetAnggaranObj->id) }}" class="btn btn-primary btn-sm">
                                             <i class="bx bx-edit"></i>
                                         </a>
+                                        @endcan
                                     @else
+                                        @can('create-target')
                                         <a href="{{ route('target-anggaran.create') }}?kode_rekening_id={{ $kr->id }}" class="btn btn-success btn-sm">
                                             <i class="bx bx-plus"></i>
                                         </a>
+                                        @endcan
                                     @endif
                                 @elseif($kr->level < 5)
                                     <span class="badge bg-info" title="Otomatis dari children">Auto</span>
                                 @endif
                             </td>
+                            @endcanany
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="6" class="text-center">
+                            <td colspan="{{ auth()->user()->canany(['edit-target', 'create-target']) ? '6' : '5' }}" class="text-center">
                                 @if($tahunAnggaranId)
                                     Tidak ada data untuk filter yang dipilih.
                                 @else
@@ -231,7 +250,8 @@
         </div>
     </div>
     
-    <!-- Modal Import Excel -->
+    <!-- Modal Import Excel - Hide untuk Viewer -->
+    @can('import-target')
     @if($showImportModal)
     <div class="modal fade show" style="display: block;" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-lg" role="document">
@@ -344,6 +364,7 @@
     </div>
     <div class="modal-backdrop fade show"></div>
     @endif
+    @endcan
     
     <style>
         .table-success {
