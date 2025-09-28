@@ -7,56 +7,91 @@ use App\Models\Penerimaan;
 use App\Models\KodeRekening;
 use App\Models\TahunAnggaran;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Edit extends Component
 {
     public $penerimaanId;
     public $tanggal;
     public $kode_rekening_id;
-    public $tahun; // Ubah dari tahun_anggaran_id ke tahun
+    public $tahun;
     public $jumlah;
     public $keterangan;
     
-    public $kodeRekeningLevel5 = [];
+    public $kodeRekeningLevel6 = []; // PERUBAHAN: dari Level5 ke Level6
     public $availableYears = [];
+    
+    // TAMBAHAN: Info SKPD
+    public $userSkpdInfo = '';
     
     protected $rules = [
         'tanggal' => 'required|date',
         'kode_rekening_id' => 'required|exists:kode_rekening,id',
         'tahun' => 'required|integer|min:2000|max:2100',
-        'jumlah' => 'required|numeric|min:0',
+        'jumlah' => 'required|numeric', // PERUBAHAN: Hapus min:0 untuk support nilai minus
         'keterangan' => 'nullable|string|max:255',
     ];
     
     public function mount($id)
     {
         $penerimaan = Penerimaan::findOrFail($id);
+        
+        // TAMBAHAN: Cek akses user ke data ini
+        $user = auth()->user();
+        if (!$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan']) && 
+            $penerimaan->skpd_id != $user->skpd_id) {
+            session()->flash('error', 'Anda tidak memiliki akses untuk mengedit data ini.');
+            return redirect()->route('penerimaan.index');
+        }
+        
+        // TAMBAHAN: Set user SKPD info
+        if ($user->skpd) {
+            $this->userSkpdInfo = 'Edit untuk: ' . $user->skpd->nama_opd;
+        } elseif ($user->isSuperAdmin()) {
+            $this->userSkpdInfo = 'Super Admin - Edit untuk BPKPAD';
+        }
+        
         $this->penerimaanId = $penerimaan->id;
         $this->tanggal = $penerimaan->tanggal->format('Y-m-d');
         $this->kode_rekening_id = $penerimaan->kode_rekening_id;
-        $this->tahun = $penerimaan->tahun; // Ambil dari kolom tahun
+        $this->tahun = $penerimaan->tahun;
         $this->jumlah = $penerimaan->jumlah;
         $this->keterangan = $penerimaan->keterangan;
         
-        $this->kodeRekeningLevel5 = KodeRekening::where('level', 5)
-                                               ->where('is_active', true)
-                                               ->orderBy('kode')
-                                               ->get();
+        // PERUBAHAN: Get kode rekening level 6 instead of level 5
+        $query = KodeRekening::where('level', 6) // PERUBAHAN: dari 5 ke 6
+                             ->where('is_active', true);
+        
+        // TAMBAHAN: Filter kode rekening based on SKPD access
+        if ($user->skpd && $user->skpd->kode_rekening_access) {
+            $allowedKodes = $user->skpd->kode_rekening_access;
+            if (!empty($allowedKodes)) {
+                $query->whereIn('id', $allowedKodes);
+            }
+        }
+        
+        $this->kodeRekeningLevel6 = $query->orderBy('kode')->get();
         
         $this->availableYears = TahunAnggaran::distinct()
                                            ->orderBy('tahun', 'desc')
                                            ->pluck('tahun')
                                            ->toArray();
+                                           
+        Log::info('Penerimaan Edit mounted', [
+            'user' => $user->name,
+            'penerimaan_id' => $id,
+            'skpd' => $user->skpd ? $user->skpd->nama_opd : 'No SKPD'
+        ]);
     }
     
     public function update()
     {
         $this->validate();
         
-        // Validasi tambahan: pastikan kode rekening adalah level 5
+        // Validasi tambahan: pastikan kode rekening adalah level 6
         $kodeRekening = KodeRekening::find($this->kode_rekening_id);
-        if ($kodeRekening->level != 5) {
-            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 5.');
+        if ($kodeRekening->level != 6) { // PERUBAHAN: dari 5 ke 6
+            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 6.');
             return;
         }
         
@@ -75,12 +110,24 @@ class Edit extends Component
         }
         
         $penerimaan = Penerimaan::find($this->penerimaanId);
+        
+        // TAMBAHAN: Update dengan tracking
+        $user = auth()->user();
+        
         $penerimaan->update([
             'tanggal' => $this->tanggal,
             'kode_rekening_id' => $this->kode_rekening_id,
-            'tahun' => $this->tahun, // Update kolom tahun
+            'tahun' => $this->tahun,
             'jumlah' => $this->jumlah,
             'keterangan' => $this->keterangan,
+            'updated_by' => $user->id, // TAMBAHAN: track siapa yang update
+        ]);
+        
+        Log::info('Penerimaan updated', [
+            'user' => $user->name,
+            'penerimaan_id' => $this->penerimaanId,
+            'kode_rekening' => $kodeRekening->kode,
+            'jumlah' => $this->jumlah
         ]);
         
         session()->flash('message', 'Data penerimaan berhasil diperbarui.');

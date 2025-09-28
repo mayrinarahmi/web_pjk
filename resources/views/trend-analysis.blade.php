@@ -1088,5 +1088,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+ setTimeout(function() {
+        const monthSelect = document.getElementById('monthSelect');
+        const currentMonth = new Date().getMonth() + 1;
+        
+        if (monthSelect) {
+            monthSelect.value = currentMonth;
+            console.log('Month selector initialized to:', currentMonth);
+            
+            // Re-attach event listener
+            monthSelect.removeEventListener('change', handleMonthChange);
+            monthSelect.addEventListener('change', function(e) {
+                if (typeof handleMonthChange === 'function') {
+                    handleMonthChange(e);
+                } else {
+                    console.error('handleMonthChange function not found');
+                }
+            });
+        }
+    }, 1000);
 </script>
 @endpush

@@ -3,9 +3,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use App\Http\Livewire\Dashboard;
-//use App\Http\Livewire\TrenAnalisis;
 
-// use App\Http\Controllers\TrendAnalysisController;
+// Controllers untuk Laporan Realisasi
+use App\Http\Controllers\LaporanRealisasiController;
+
+// Livewire Components (existing)
 use App\Http\Livewire\KodeRekening\Index as KodeRekeningIndex;
 use App\Http\Livewire\KodeRekening\Create as KodeRekeningCreate;
 use App\Http\Livewire\KodeRekening\Edit as KodeRekeningEdit;
@@ -15,8 +17,6 @@ use App\Http\Livewire\TargetBulan\Edit as TargetBulanEdit;
 use App\Http\Livewire\TargetAnggaran\Index as TargetAnggaranIndex;
 use App\Http\Livewire\TargetAnggaran\Create as TargetAnggaranCreate;
 use App\Http\Livewire\TargetAnggaran\Edit as TargetAnggaranEdit;
-// TAMBAHAN: Import Target Periode
-use App\Http\Controllers\Api\TrendAnalysisController;
 use App\Http\Livewire\TargetPeriode\Index as TargetPeriodeIndex;
 use App\Http\Livewire\TargetPeriode\Create as TargetPeriodeCreate;
 use App\Http\Livewire\TargetPeriode\Edit as TargetPeriodeEdit;
@@ -31,46 +31,59 @@ use App\Http\Controllers\BackupController;
 use App\Http\Livewire\TahunAnggaran\Index as TahunAnggaranIndex;
 use App\Http\Livewire\TahunAnggaran\Create as TahunAnggaranCreate;
 use App\Http\Livewire\TahunAnggaran\Edit as TahunAnggaranEdit;
-
+use App\Http\Livewire\Skpd\Index as SkpdIndex;
 
 // Route untuk halaman utama - cek apakah user sudah login
 Route::get('/', function () {
-    // Jika sudah login, arahkan ke dashboard
     if (Auth::check()) {
         return redirect()->route('dashboard');
     }
-    // Jika belum login, arahkan ke halaman login
     return redirect()->route('login');
 });
 
 // === ROUTES UNTUK GUEST (BELUM LOGIN) ===
 Route::middleware('guest')->group(function () {
-    // Route untuk halaman login
     Route::get('/login', function () {
         return view('auth.login');
     })->name('login');
 
-    // Route untuk proses autentikasi
     Route::post('/authenticate', function (Request $request) {
         $credentials = $request->validate([
-            'email' => 'required|email',
+            'login' => 'required|string|size:18',
             'password' => 'required'
+        ], [
+            'login.required' => 'NIP wajib diisi',
+            'login.size' => 'NIP harus 18 digit',
+            'password.required' => 'Password wajib diisi'
         ]);
 
-        if (Auth::attempt($credentials)) {
+        $attemptCredentials = [
+            'nip' => $credentials['login'],
+            'password' => $credentials['password']
+        ];
+
+        if (Auth::attempt($attemptCredentials)) {
             $request->session()->regenerate();
+            
+            \Log::info('User logged in', [
+                'user_id' => Auth::id(),
+                'nip' => Auth::user()->nip,
+                'name' => Auth::user()->name,
+                'role' => Auth::user()->roles->pluck('name')->first(),
+                'skpd' => Auth::user()->skpd ? Auth::user()->skpd->nama_opd : 'No SKPD'
+            ]);
+            
             return redirect()->intended(route('dashboard'));
         }
 
         return back()->withErrors([
-            'email' => 'Kredensial yang diberikan tidak cocok dengan catatan kami.',
-        ])->onlyInput('email');
+            'login' => 'NIP atau password yang Anda masukkan salah.',
+        ])->onlyInput('login');
     })->name('authenticate');
 });
 
 // === ROUTES UNTUK USER YANG SUDAH LOGIN ===
 Route::middleware('auth')->group(function () {
-    // Route untuk logout
     Route::post('/logout', function (Request $request) {
         Auth::logout();
         $request->session()->invalidate();
@@ -78,92 +91,159 @@ Route::middleware('auth')->group(function () {
         return redirect()->route('login');
     })->name('logout');
 
-    // Profile route
     Route::get('/profile/edit', function() {
         return view('profile.edit');
     })->name('profile.edit');
 
-    // Route yang bisa diakses oleh semua user yang sudah login
+    // Dashboard - Semua user bisa akses
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
     
-    Route::get('/trend-analysis', function() {
-        return view('trend-analysis');
-    })->name('trend-analysis');
+    // Trend Analysis PAGE (VIEW)
+    Route::middleware('permission:view-trend-analysis')->group(function () {
+        Route::get('/trend-analysis', function() {
+            return view('trend-analysis');
+        })->name('trend-analysis');
+    });
 
-    Route::get('/laporan', LaporanIndex::class)->name('laporan.index');
+    // Laporan - Semua user bisa akses
+    Route::middleware('permission:view-laporan')->group(function () {
+        Route::get('/laporan', LaporanIndex::class)->name('laporan.index');
+        
+        // ====================================
+        // LAPORAN REALISASI ROUTES (NEW)
+        // ====================================
+        Route::get('/laporan/realisasi', [LaporanRealisasiController::class, 'index'])
+            ->name('laporan.realisasi');
+        
+        Route::get('/laporan/realisasi/data', [LaporanRealisasiController::class, 'getData'])
+            ->name('laporan.realisasi.data');
+        
+        Route::get('/laporan/realisasi/export-excel', [LaporanRealisasiController::class, 'exportExcel'])
+            ->name('laporan.realisasi.export.excel');
+        
+        Route::get('/laporan/realisasi/export-pdf', [LaporanRealisasiController::class, 'exportPDF'])
+            ->name('laporan.realisasi.export.pdf');
+        // ====================================
+    });
 
-    // === ROUTES UNTUK OPERATOR SAJA (Full Access termasuk User Management) ===
-    Route::middleware('role:Operator')->group(function () {
-        // User Management routes - DIPINDAH KE OPERATOR
+    // ====================================
+    // MASTER DATA ROUTES
+    // ====================================
+    
+    // Tahun Anggaran
+    Route::middleware('permission:view-tahun-anggaran')->group(function () {
+        Route::get('/tahun-anggaran', TahunAnggaranIndex::class)->name('tahun-anggaran.index');
+    });
+    
+    Route::middleware('permission:create-tahun-anggaran')->group(function () {
+        Route::get('/tahun-anggaran/create', TahunAnggaranCreate::class)->name('tahun-anggaran.create');
+    });
+    Route::middleware('permission:edit-tahun-anggaran')->group(function () {
+        Route::get('/tahun-anggaran/{id}/edit', TahunAnggaranEdit::class)->name('tahun-anggaran.edit');
+    });
+    
+    // Kode Rekening
+    Route::middleware('permission:view-kode-rekening')->group(function () {
+        Route::get('/kode-rekening', KodeRekeningIndex::class)->name('kode-rekening.index');
+        Route::get('/kode-rekening/template', function() {
+            return response()->download(public_path('templates/template_kode_rekening.xlsx'));
+        })->name('kode-rekening.template');
+    });
+    
+    Route::middleware('permission:create-kode-rekening')->group(function () {
+        Route::get('/kode-rekening/create', KodeRekeningCreate::class)->name('kode-rekening.create');
+    });
+    Route::middleware('permission:edit-kode-rekening')->group(function () {
+        Route::get('/kode-rekening/{id}/edit', KodeRekeningEdit::class)->name('kode-rekening.edit');
+    });
+    
+    // Target Periode
+    Route::middleware('permission:view-target')->group(function () {
+        Route::get('/target-periode', TargetPeriodeIndex::class)->name('target-periode.index');
+    });
+    
+    Route::middleware('permission:create-target')->group(function () {
+        Route::get('/target-periode/create', TargetPeriodeCreate::class)->name('target-periode.create');
+    });
+    Route::middleware('permission:edit-target')->group(function () {
+        Route::get('/target-periode/{id}/edit', TargetPeriodeEdit::class)->name('target-periode.edit');
+    });
+    
+    // Target Anggaran (Pagu)
+    Route::middleware('permission:view-target')->group(function () {
+        Route::get('/target-anggaran', TargetAnggaranIndex::class)->name('target-anggaran.index');
+    });
+    
+    Route::middleware('permission:create-target')->group(function () {
+        Route::get('/target-anggaran/create', TargetAnggaranCreate::class)->name('target-anggaran.create');
+    });
+    Route::middleware('permission:edit-target')->group(function () {
+        Route::get('/target-anggaran/{id}/edit', TargetAnggaranEdit::class)->name('target-anggaran.edit');
+    });
+    
+    // Target Bulan (legacy)
+    Route::middleware('permission:view-target')->group(function () {
+        Route::get('/target-bulan', TargetBulanIndex::class)->name('target-bulan.index');
+    });
+    Route::middleware('permission:create-target')->group(function () {
+        Route::get('/target-bulan/create', TargetBulanCreate::class)->name('target-bulan.create');
+    });
+    Route::middleware('permission:edit-target')->group(function () {
+        Route::get('/target-bulan/{id}/edit', TargetBulanEdit::class)->name('target-bulan.edit');
+    });
+
+    // ====================================
+    // TRANSAKSI ROUTES
+    // ====================================
+    
+    // Penerimaan
+    Route::middleware('permission:view-penerimaan')->group(function () {
+        Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
+    });
+    
+    Route::middleware('permission:create-penerimaan')->group(function () {
+        Route::get('/penerimaan/create', PenerimaanCreate::class)->name('penerimaan.create');
+    });
+    Route::middleware('permission:edit-penerimaan')->group(function () {
+        Route::get('/penerimaan/{id}/edit', PenerimaanEdit::class)->name('penerimaan.edit');
+    });
+
+    // ====================================
+    // PENGATURAN ROUTES
+    // ====================================
+    
+    // User Management
+    Route::middleware('permission:view-users')->group(function () {
         Route::get('/user', UserIndex::class)->name('user.index');
+    });
+    Route::middleware('permission:create-users')->group(function () {
         Route::get('/user/create', UserCreate::class)->name('user.create');
+    });
+    Route::middleware('permission:edit-users')->group(function () {
         Route::get('/user/{id}/edit', UserEdit::class)->name('user.edit');
     });
 
-    // === ROUTES UNTUK ADMINISTRATOR DAN OPERATOR (tapi bukan Viewer) ===
-    Route::middleware('role:Administrator,Operator')->group(function () {
-        // Backup routes - Administrator dan Operator bisa akses
+    // Backup routes
+    Route::middleware('permission:manage-backup')->group(function () {
         Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
         Route::get('/backup/create', [BackupController::class, 'create'])->name('backup.create');
         Route::get('/backup/download/{fileName}', [BackupController::class, 'download'])->name('backup.download');
         Route::get('/backup/delete/{fileName}', [BackupController::class, 'delete'])->name('backup.delete');
         Route::get('/backup/restore/{fileName}', [BackupController::class, 'restore'])->name('backup.restore');
-        
-        // Tahun Anggaran routes - Create/Edit hanya Admin dan Operator
-        Route::get('/tahun-anggaran/create', TahunAnggaranCreate::class)->name('tahun-anggaran.create');
-        Route::get('/tahun-anggaran/{id}/edit', TahunAnggaranEdit::class)->name('tahun-anggaran.edit');
-        
-        // Kode Rekening routes - Create/Edit hanya Admin dan Operator
-        Route::get('/kode-rekening/create', KodeRekeningCreate::class)->name('kode-rekening.create');
-        Route::get('/kode-rekening/{id}/edit', KodeRekeningEdit::class)->name('kode-rekening.edit');
-        
-        // Target Bulan routes - Create/Edit hanya Admin dan Operator
-        Route::get('/target-bulan/create', TargetBulanCreate::class)->name('target-bulan.create');
-        Route::get('/target-bulan/{id}/edit', TargetBulanEdit::class)->name('target-bulan.edit');
-        
-        // Target Anggaran routes - Create/Edit hanya Admin dan Operator
-        Route::get('/target-anggaran/create', TargetAnggaranCreate::class)->name('target-anggaran.create');
-        Route::get('/target-anggaran/{id}/edit', TargetAnggaranEdit::class)->name('target-anggaran.edit');
-        
-        // Target Periode Routes - Create/Edit hanya Admin dan Operator
-        Route::get('/target-periode/create', TargetPeriodeCreate::class)->name('target-periode.create');
-        Route::get('/target-periode/{id}/edit', TargetPeriodeEdit::class)->name('target-periode.edit');
-
-        // Penerimaan routes - Create/Edit hanya Admin dan Operator
-        Route::get('/penerimaan/create', PenerimaanCreate::class)->name('penerimaan.create');
-        Route::get('/penerimaan/{id}/edit', PenerimaanEdit::class)->name('penerimaan.edit');
     });
-
-    // === ROUTES UNTUK SEMUA USER YANG LOGIN (termasuk Viewer untuk VIEW only) ===
-    Route::middleware('role:Administrator,Operator,Viewer')->group(function () {
-        // Index/View routes - Semua role bisa akses untuk LIHAT
-        Route::get('/tahun-anggaran', TahunAnggaranIndex::class)->name('tahun-anggaran.index');
-        Route::get('/kode-rekening', KodeRekeningIndex::class)->name('kode-rekening.index');
-        Route::get('/target-bulan', TargetBulanIndex::class)->name('target-bulan.index');
-        Route::get('/target-anggaran', TargetAnggaranIndex::class)->name('target-anggaran.index');
-        Route::get('/target-periode', TargetPeriodeIndex::class)->name('target-periode.index');
-        Route::get('/penerimaan', PenerimaanIndex::class)->name('penerimaan.index');
-        
-        // Template download - Viewer juga bisa download template
-        Route::get('/kode-rekening/template', function() {
-            return response()->download(public_path('templates/template_kode_rekening.xlsx'));
-        })->name('kode-rekening.template');
-        
-        // Trend Analysis Routes - Semua bisa akses
-        Route::prefix('trend-analysis')->group(function () {
-            Route::get('/overview', [TrendAnalysisController::class, 'overview']);
-            Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
-            Route::get('/search', [TrendAnalysisController::class, 'search']);
-            Route::get('/seasonal', [TrendAnalysisController::class, 'seasonal']);
-            Route::get('/month-comparison', [TrendAnalysisController::class, 'monthComparison']);
-            Route::post('/clear-cache', [TrendAnalysisController::class, 'clearCache']);
-        });
-
-        // Alternative route group if you prefer the old URL structure
-        Route::prefix('trend')->group(function () {
-            Route::get('/overview', [TrendAnalysisController::class, 'overview']);
-            Route::get('/category/{categoryId}', [TrendAnalysisController::class, 'category']);
-            Route::get('/search', [TrendAnalysisController::class, 'search']);
-        });
+    
+    // SKPD Management Routes
+    Route::middleware(['auth', 'role:Super Admin|Administrator'])->group(function () {
+        Route::get('/skpd', SkpdIndex::class)->name('skpd.index');
     });
+});
+
+// TEMPORARY - HAPUS SETELAH DIGUNAKAN
+Route::get('/clear-all-cache', function() {
+    Artisan::call('cache:clear');
+    Artisan::call('config:clear');
+    Artisan::call('route:clear');
+    Artisan::call('view:clear');
+    
+    return "Cache cleared successfully!";
 });

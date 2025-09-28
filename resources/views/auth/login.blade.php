@@ -4,7 +4,6 @@
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="auth-logo text-center mb-2">
-            <!-- <img src="{{ asset('images/banjarmasin-logo.png') }}" alt="Logo Kota Banjarmasin" class="city-logo"> -->
             <img src="{{ asset('images/logo.png') }}" alt="Logo BKPAD Banjarmasin" class="pkpad-logo" style="width: 300px; height: auto; max-width: 100%; margin-bottom: 10px;">
         </div>
         
@@ -24,17 +23,32 @@
                 <form method="POST" action="{{ route('authenticate') }}">
                     @csrf
                     <div class="mb-3">
-                        <label for="email" class="form-label">EMAIL</label>
-                        <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" placeholder="Masukkan email Anda" required autofocus>
-                        @error('email')
+                        <label for="login" class="form-label">NIP</label>
+                        <input type="text" 
+                               class="form-control @error('login') is-invalid @enderror" 
+                               id="login" 
+                               name="login" 
+                               placeholder="Masukkan NIP 18 digit" 
+                               maxlength="18"
+                               pattern="[0-9]{18}"
+                               title="NIP harus 18 digit angka"
+                               required 
+                               autofocus>
+                        @error('login')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
+                        <div class="form-text">Gunakan NIP untuk login (18 digit angka)</div>
                     </div>
                     
                     <div class="mb-4">
                         <label for="password" class="form-label">PASSWORD</label>
                         <div class="input-group input-group-merge">
-                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" placeholder="••••••••" required>
+                            <input type="password" 
+                                   class="form-control @error('password') is-invalid @enderror" 
+                                   id="password" 
+                                   name="password" 
+                                   placeholder="••••••••" 
+                                   required>
                             <span class="input-group-text cursor-pointer"><i class="bx bx-hide"></i></span>
                         </div>
                         @error('password')
@@ -99,6 +113,7 @@
 
 .btn-login:hover {
     background-color: #5855eb;
+    color: white;
 }
 
 .form-control {
@@ -147,6 +162,15 @@
                     icon.classList.toggle('bx-hide');
                     icon.classList.toggle('bx-show');
                 }
+            });
+        }
+        
+        // Auto format NIP input to only accept numbers
+        const nipInput = document.getElementById('login');
+        if (nipInput) {
+            nipInput.addEventListener('input', function(e) {
+                // Remove non-numeric characters
+                e.target.value = e.target.value.replace(/[^0-9]/g, '');
             });
         }
     });

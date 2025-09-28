@@ -47,30 +47,30 @@ class KodeRekening extends Model
         $kodeRekening = self::find($kodeRekeningId);
         if (!$kodeRekening) return 0;
         
-        // Jika level 5, ambil langsung dari database
-        if ($kodeRekening->level == 5) {
+        // Jika level 6, ambil langsung dari database
+        if ($kodeRekening->level == 6) {
             $target = TargetAnggaran::where('kode_rekening_id', $kodeRekeningId)
                 ->where('tahun_anggaran_id', $tahunAnggaranId)
                 ->first();
             return $target ? $target->jumlah : 0;
         }
         
-        // Jika level 1-4, hitung dari SUM children
+        // Jika level 1-5, hitung dari SUM children
         return $kodeRekening->calculateHierarchiTarget($tahunAnggaranId);
     }
     
     // Method untuk menghitung target hierarki
     public function calculateHierarchiTarget($tahunAnggaranId)
     {
-        // Jika level 5, ambil dari database
-        if ($this->level == 5) {
+        // Jika level 6, ambil dari database
+        if ($this->level == 6) {
             $target = TargetAnggaran::where('kode_rekening_id', $this->id)
                 ->where('tahun_anggaran_id', $tahunAnggaranId)
                 ->first();
             return $target ? $target->jumlah : 0;
         }
         
-        // Jika level 1-4, sum dari children
+        // Jika level 1-5, sum dari children
         $total = 0;
         foreach ($this->children as $child) {
             $total += $child->calculateHierarchiTarget($tahunAnggaranId);
@@ -79,23 +79,23 @@ class KodeRekening extends Model
         return $total;
     }
     
-    // Helper method untuk mendapatkan semua descendant level 5
-    public function getAllLevel5Descendants()
+    // Helper method untuk mendapatkan semua descendant level 6
+    public function getAllLevel6Descendants()
     {
-        if ($this->level == 5) {
+        if ($this->level == 6) {
             return [$this->id];
         }
         
         $descendants = [];
-        $this->collectLevel5Descendants($descendants);
+        $this->collectLevel6Descendants($descendants);
         
         return $descendants;
     }
     
-    // Method recursive untuk mengumpulkan level 5 descendants
-    private function collectLevel5Descendants(&$descendants)
+    // Method recursive untuk mengumpulkan level 6 descendants
+    private function collectLevel6Descendants(&$descendants)
     {
-        if ($this->level == 5) {
+        if ($this->level == 6) {
             $descendants[] = $this->id;
             return;
         }
@@ -104,7 +104,7 @@ class KodeRekening extends Model
         $this->load('children');
         
         foreach ($this->children as $child) {
-            $child->collectLevel5Descendants($descendants);
+            $child->collectLevel6Descendants($descendants);
         }
     }
     
@@ -185,7 +185,7 @@ class KodeRekening extends Model
     }
     
     // Method untuk mendapatkan data hierarkis dengan urutan yang benar
-    public static function getHierarchicalList($visibleLevels = [1,2,3,4,5], $search = null)
+    public static function getHierarchicalList($visibleLevels = [1,2,3,4,5,6], $search = null)
     {
         $query = self::where('is_active', true);
         
@@ -205,7 +205,7 @@ class KodeRekening extends Model
     }
     
     // Alternative method for pagination dengan ordering yang benar
-    public static function getHierarchicalQuery($visibleLevels = [1,2,3,4,5], $search = null)
+    public static function getHierarchicalQuery($visibleLevels = [1,2,3,4,5,6], $search = null)
     {
         $query = self::where('is_active', true);
         
@@ -247,20 +247,20 @@ class KodeRekening extends Model
                   ->get();
     }
     
-    // Static method untuk mendapatkan kode rekening level 5 berdasarkan parent pattern
-    public static function getLevel5ByParentPattern($pattern)
+    // Static method untuk mendapatkan kode rekening level 6 berdasarkan parent pattern
+    public static function getLevel6ByParentPattern($pattern)
     {
         return self::where('kode', 'like', $pattern . '%')
-                  ->where('level', 5)
+                  ->where('level', 6)
                   ->pluck('id')
                   ->toArray();
     }
     
-    // Method untuk update hierarki target anggaran
+    // Method untuk update hierarki target anggaran (updated untuk level 6)
     public static function updateHierarchiTargets($tahunAnggaranId)
     {
-        // Update dari level 4 ke atas (bottom-up calculation)
-        for ($level = 4; $level >= 1; $level--) {
+        // Update dari level 5 ke atas (bottom-up calculation)
+        for ($level = 5; $level >= 1; $level--) {
             $kodeRekeningList = self::where('level', $level)
                 ->where('is_active', true)
                 ->get();
@@ -296,11 +296,11 @@ class KodeRekening extends Model
         return $path;
     }
     
-    // Method untuk validasi konsistensi hierarki
+    // Method untuk validasi konsistensi hierarki (updated untuk level 6)
     public function validateHierarchi($tahunAnggaranId)
     {
-        if ($this->level == 5) {
-            return true; // Level 5 selalu valid
+        if ($this->level == 6) {
+            return true; // Level 6 selalu valid
         }
         
         $manualTarget = TargetAnggaran::where('kode_rekening_id', $this->id)

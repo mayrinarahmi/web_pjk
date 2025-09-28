@@ -1,40 +1,66 @@
 /**
- * Trend Analysis JavaScript - Fixed Version
- * Fixed API endpoints to match Laravel routes
+ * Trend Analysis JavaScript - FIXED VERSION 2.0
+ * Fixed: Race Condition, State Management, Chart Types, Request Handling
  */
+
 // Check if ApexCharts is loaded
 if (typeof ApexCharts === 'undefined') {
     console.error('ApexCharts is not loaded! Please include ApexCharts library before this script.');
 }
-// Global variables
+
+// ========================================
+// GLOBAL VARIABLES & STATE MANAGEMENT
+// ========================================
+
 let chart = null;
 let searchTimeout = null;
-let currentCategoryId = '';
-let currentYearRange = 3;
 let searchModal = null;
-let currentView = 'yearly';
-let currentMonth = new Date().getMonth() + 1;
 
-// API endpoints - Fixed to match your Laravel setup
-const API_BASE = '/api/trend';  // Changed from /api/trend-analysis
+// Request management untuk handle race condition
+let currentRequestController = null;
+let requestTimestamp = 0;
+let pendingRequests = new Map();
+
+// State management object - single source of truth
+const appState = {
+    view: 'yearly',
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    yearRange: 3,
+    categoryId: '',
+    categoryName: '',
+    categoryLevel: null,
+    isLoading: false
+};
+
+// Previous state untuk comparison
+let previousState = { ...appState };
+
+// API endpoints
+const API_BASE = '/api/trend';
 const API_OVERVIEW = `${API_BASE}/overview`;
 const API_CATEGORY = `${API_BASE}/category`;
 const API_SEARCH = `${API_BASE}/search`;
+const API_CLEAR_CACHE = `${API_BASE}/clear-cache`;
 
-// Initialize when DOM is ready
+// ========================================
+// INITIALIZATION
+// ========================================
+
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing trend analysis...');
-    console.log('API endpoints:', {
-        base: API_BASE,
-        overview: API_OVERVIEW,
-        category: API_CATEGORY,
-        search: API_SEARCH
-    });
+    console.log('Initializing trend analysis v2.0...');
+    console.log('Initial state:', appState);
     
     initializeModal();
     initializeEventListeners();
     initializeMonthlyFeatures();
+    syncUIWithState();
     loadInitialData();
+    
+    // Add dev tools if in development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        addDevelopmentTools();
+    }
 });
 
 /**
@@ -62,14 +88,24 @@ function initializeModal() {
 }
 
 /**
- * Initialize event listeners
+ * Initialize all event listeners with debouncing
  */
 function initializeEventListeners() {
     // Year range buttons
-    const yearButtons = document.querySelectorAll('#yearButtons button');
-    yearButtons.forEach(button => {
-        button.addEventListener('click', handleYearChange);
+    document.querySelectorAll('#yearButtons button').forEach(button => {
+        button.addEventListener('click', debounce(handleYearChange, 300));
     });
+    
+    // View toggle buttons
+    document.querySelectorAll('#viewToggle button').forEach(button => {
+        button.addEventListener('click', debounce(handleViewToggle, 300));
+    });
+    
+    // Month selector
+    const monthSelect = document.getElementById('monthSelect');
+    if (monthSelect) {
+        monthSelect.addEventListener('change', debounce(handleMonthChange, 300));
+    }
     
     // Modal search input
     const modalSearchInput = document.getElementById('modalSearchInput');
@@ -80,53 +116,271 @@ function initializeEventListeners() {
     // Reset button
     const resetBtn = document.getElementById('resetBtn');
     if (resetBtn) {
-        resetBtn.addEventListener('click', handleReset);
+        resetBtn.addEventListener('click', debounce(handleReset, 300));
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyboardShortcuts);
+}
+
+/**
+ * Initialize monthly view features
+ */
+function initializeMonthlyFeatures() {
+    const monthSelect = document.getElementById('monthSelect');
+    if (monthSelect) {
+        monthSelect.value = appState.month;
+    }
+    
+    // Sync month selector visibility
+    syncMonthSelectorVisibility();
+}
+
+// ========================================
+// STATE MANAGEMENT FUNCTIONS
+// ========================================
+
+/**
+ * Update application state and trigger necessary updates
+ */
+function updateState(updates, forceReload = true) {
+    console.log('State update requested:', updates);
+    
+    // Store previous state
+    previousState = { ...appState };
+    
+    // Apply updates
+    let hasChanges = false;
+    for (const [key, value] of Object.entries(updates)) {
+        if (appState[key] !== value) {
+            appState[key] = value;
+            hasChanges = true;
+        }
+    }
+    
+    if (!hasChanges && !forceReload) {
+        console.log('No state changes, skipping update');
+        return;
+    }
+    
+    console.log('New state:', appState);
+    
+    // Sync UI with new state
+    syncUIWithState();
+    
+    // Cancel any pending requests
+    cancelPendingRequests();
+    
+    // Reload data if needed
+    if (forceReload) {
+        if (appState.categoryId) {
+            loadChartData('category', appState.categoryId);
+        } else {
+            loadChartData('overview');
+        }
     }
 }
 
 /**
- * Initialize monthly features
+ * Sync UI elements with current state
  */
-function initializeMonthlyFeatures() {
-    const viewButtons = document.querySelectorAll('#viewToggle button');
-    viewButtons.forEach(button => {
-        button.addEventListener('click', handleViewToggle);
+function syncUIWithState() {
+    // Year range buttons
+    document.querySelectorAll('#yearButtons button').forEach(btn => {
+        const isActive = parseInt(btn.dataset.years) === appState.yearRange;
+        btn.classList.toggle('btn-primary', isActive);
+        btn.classList.toggle('btn-outline-primary', !isActive);
     });
     
+    // View toggle buttons
+    document.querySelectorAll('#viewToggle button').forEach(btn => {
+        const isActive = btn.dataset.view === appState.view;
+        btn.classList.toggle('btn-primary', isActive);
+        btn.classList.toggle('btn-outline-primary', !isActive);
+    });
+    
+    // Month selector
     const monthSelect = document.getElementById('monthSelect');
     if (monthSelect) {
-        monthSelect.value = currentMonth;
-        monthSelect.addEventListener('change', handleMonthChange);
+        monthSelect.value = appState.month;
+    }
+    
+    // Month selector visibility
+    syncMonthSelectorVisibility();
+    
+    // Category title
+    updateCategoryTitle();
+    
+    // Reset button visibility
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) {
+        resetBtn.style.display = appState.categoryId ? 'inline-block' : 'none';
     }
 }
+
+/**
+ * Sync month selector visibility based on view mode
+ */
+function syncMonthSelectorVisibility() {
+    const monthSelector = document.getElementById('monthSelector');
+    const monthlyTable = document.getElementById('monthlyComparisonTable');
+    
+    if (appState.view === 'monthly') {
+        if (monthSelector) monthSelector.style.display = 'block';
+        if (monthlyTable) monthlyTable.style.display = 'block';
+    } else {
+        if (monthSelector) monthSelector.style.display = 'none';
+        if (monthlyTable) monthlyTable.style.display = 'none';
+    }
+}
+
+/**
+ * Update category title display
+ */
+function updateCategoryTitle() {
+    const categoryTitle = document.getElementById('categoryTitle');
+    const chartTitle = document.getElementById('chartTitle');
+    
+    if (appState.categoryId && appState.categoryName) {
+        const levelBadge = appState.categoryLevel ? 
+            `<span class="badge bg-${getLevelColor(appState.categoryLevel)} ms-2">Level ${appState.categoryLevel}</span>` : '';
+        const titleHtml = `${appState.categoryName}${levelBadge}`;
+        
+        if (categoryTitle) categoryTitle.innerHTML = titleHtml;
+        if (chartTitle) chartTitle.innerHTML = titleHtml;
+    } else {
+        const defaultTitle = 'Overview - Semua Kategori';
+        if (categoryTitle) categoryTitle.textContent = defaultTitle;
+        if (chartTitle) chartTitle.textContent = defaultTitle;
+    }
+}
+
+// ========================================
+// REQUEST MANAGEMENT
+// ========================================
+
+/**
+ * Cancel all pending requests
+ */
+function cancelPendingRequests() {
+    if (currentRequestController) {
+        currentRequestController.abort();
+        currentRequestController = null;
+    }
+    
+    // Cancel any other pending requests
+    pendingRequests.forEach((controller, id) => {
+        controller.abort();
+    });
+    pendingRequests.clear();
+}
+
+/**
+ * Set loading state for UI elements
+ */
+function setLoadingState(isLoading) {
+    appState.isLoading = isLoading;
+    
+    // Show/hide loading indicator
+    const loadingEl = document.getElementById('loadingChart');
+    if (loadingEl) {
+        loadingEl.style.display = isLoading ? 'flex' : 'none';
+    }
+    
+    // Disable/enable controls
+    const controls = document.querySelectorAll('#yearButtons button, #viewToggle button, #monthSelect, #resetBtn');
+    controls.forEach(el => {
+        el.disabled = isLoading;
+    });
+}
+
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
+/**
+ * Debounce function to limit rapid calls
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Get color for level badge
+ */
+function getLevelColor(level) {
+    const colors = {
+        1: 'primary',
+        2: 'success',
+        3: 'info',
+        4: 'warning',
+        5: 'secondary',
+        6: 'danger'
+    };
+    return colors[level] || 'secondary';
+}
+
+// ========================================
+// DATA LOADING FUNCTIONS
+// ========================================
 
 /**
  * Load initial data
  */
 async function loadInitialData() {
-    await loadChartData('overview');
+    await loadChartData('overview', null, true);
 }
 
 /**
- * Load chart data from API
+ * Main function to load chart data with proper request management
  */
-async function loadChartData(type, categoryId = null) {
-    console.log('Loading chart data:', type, categoryId, 'View:', currentView);
+async function loadChartData(type, categoryId = null, noCache = false) {
+    console.log('Loading chart data:', {
+        type,
+        categoryId,
+        view: appState.view,
+        month: appState.month,
+        yearRange: appState.yearRange,
+        noCache
+    });
     
-    showLoading();
+    // Cancel previous requests
+    cancelPendingRequests();
+    
+    // Create new AbortController
+    currentRequestController = new AbortController();
+    const thisRequestTimestamp = Date.now();
+    requestTimestamp = thisRequestTimestamp;
+    
+    // Set loading state
+    setLoadingState(true);
     
     try {
+        // Build URL based on type
         let url;
         if (type === 'overview') {
-            url = `${API_OVERVIEW}?years=${currentYearRange}&view=${currentView}`;
-            if (currentView === 'monthly') {
-                url += `&month=${currentMonth}`;
+            url = `${API_OVERVIEW}?years=${appState.yearRange}&view=${appState.view}`;
+            if (appState.view === 'monthly' && appState.month) {
+                url += `&month=${appState.month}`;
             }
         } else {
-            url = `${API_CATEGORY}/${categoryId}?years=${currentYearRange}&view=${currentView}`;
-            if (currentView === 'monthly') {
-                url += `&month=${currentMonth}`;
+            url = `${API_CATEGORY}/${categoryId}?years=${appState.yearRange}&view=${appState.view}`;
+            if (appState.view === 'monthly' && appState.month) {
+                url += `&month=${appState.month}`;
             }
+        }
+        
+        // Add nocache parameter if needed
+        if (noCache) {
+            url += '&nocache=1';
         }
         
         console.log('Fetching from:', url);
@@ -136,14 +390,17 @@ async function loadChartData(type, categoryId = null) {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-            }
+            },
+            signal: currentRequestController.signal
         });
         
-        console.log('Response status:', response.status);
+        // Check if this is still the latest request
+        if (thisRequestTimestamp !== requestTimestamp) {
+            console.log('Request outdated, ignoring response');
+            return;
+        }
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Response error:', errorText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -151,95 +408,139 @@ async function loadChartData(type, categoryId = null) {
         console.log('API response:', result);
         
         if (result.success) {
-            if (!result.data) {
-                console.warn('No data in response');
-                showError('Tidak ada data untuk ditampilkan');
-                return;
-            }
-            
-            // Check if we have valid chart data
-            if (!result.data.categories || !result.data.series) {
-                console.warn('Invalid data structure:', result.data);
-                // Try to use empty arrays as fallback
-                result.data.categories = result.data.categories || [];
-                result.data.series = result.data.series || [];
-            }
-            
-            if (currentView === 'monthly') {
-                renderMonthlyChart(result.data);
-                renderMonthlyTable(result.data);
-                if (result.data.summary) {
-                    updateMonthlySummary(result.data.summary);
-                }
-            } else {
-                renderChart(result.data);
-                const monthlyTable = document.getElementById('monthlyComparisonTable');
-                if (monthlyTable) {
-                    monthlyTable.style.display = 'none';
-                }
-            }
-            
-            // Update summary if exists
-            if (result.data.summary) {
-                updateSummary(result.data.summary);
-            }
-            
-            hideError();
+            processChartData(result.data);
         } else {
             showError(result.message || 'Gagal memuat data');
         }
+        
     } catch (error) {
-        console.error('Load data error:', error);
-        showError('Terjadi kesalahan: ' + error.message);
+        if (error.name === 'AbortError') {
+            console.log('Request was cancelled');
+        } else {
+            console.error('Load data error:', error);
+            showError('Terjadi kesalahan: ' + error.message);
+        }
     } finally {
-        hideLoading();
+        setLoadingState(false);
     }
 }
 
 /**
- * Render chart for yearly view
+ * Process and render chart data based on current view
  */
-/**
- * Render chart for yearly view
- */
-function renderChart(data) {
-    console.log('Rendering chart with data:', data);
-    
-    // Validasi data
-    if (!data || !data.series || !data.categories) {
-        console.error('Invalid chart data');
-        data = {
-            categories: [],
-            series: []
-        };
-    }
-    
-    // Pastikan container ada
-    const chartContainer = document.querySelector("#trendChart");
-    if (!chartContainer) {
-        console.error('Chart container not found');
+function processChartData(data) {
+    if (!data) {
+        showNoDataMessage();
         return;
     }
     
-    // Destroy existing chart
+    // Validate data structure
+    if (!data.categories || !data.series) {
+        console.warn('Invalid data structure:', data);
+        showNoDataMessage();
+        return;
+    }
+    
+    // Check if series is empty
+    if (data.series.length === 0) {
+        showNoDataMessage();
+        return;
+    }
+    
+    // Hide error messages
+    hideError();
+    
+    // Render based on view mode
+    if (appState.view === 'monthly') {
+        renderMonthlyChart(data);
+        renderMonthlyTable(data);
+        if (data.summary) {
+            updateMonthlySummary(data.summary);
+        }
+    } else {
+        renderYearlyChart(data);
+        // Hide monthly table in yearly view
+        const monthlyTable = document.getElementById('monthlyComparisonTable');
+        if (monthlyTable) {
+            monthlyTable.style.display = 'none';
+        }
+    }
+    
+    // Update summary if exists
+    if (data.summary) {
+        updateSummary(data.summary);
+    }
+    
+    // Update category info if exists
+    if (data.categoryInfo) {
+        updateCategoryInfo(data.categoryInfo);
+    }
+}
+
+// ========================================
+// CHART RENDERING FUNCTIONS
+// ========================================
+
+/**
+ * Determine chart type based on view mode and filters
+ */
+function determineChartType() {
+    if (appState.view === 'yearly') {
+        return 'bar'; // Always bar chart for yearly comparison
+    } else if (appState.view === 'monthly') {
+        // Monthly view: check if specific month is selected
+        if (appState.month && appState.month !== '') {
+            return 'bar'; // Bar chart for month comparison across years
+        } else {
+            return 'line'; // Line chart for 12-month trend
+        }
+    }
+    return 'bar'; // Default to bar
+}
+
+/**
+ * Safely destroy existing chart
+ */
+function destroyExistingChart() {
     if (chart) {
         try {
             chart.destroy();
             chart = null;
         } catch (e) {
             console.error('Error destroying chart:', e);
+            chart = null;
         }
     }
     
-    // Clear container
-    chartContainer.innerHTML = '';
+    // Clear the container
+    const chartContainer = document.querySelector("#trendChart");
+    if (chartContainer) {
+        chartContainer.innerHTML = '';
+    }
+}
+
+/**
+ * Render chart for yearly view (always bar chart)
+ */
+function renderYearlyChart(data) {
+    console.log('Rendering yearly chart with data:', data);
     
-    // Chart options
+    // Destroy existing chart
+    destroyExistingChart();
+    
+    const chartContainer = document.querySelector("#trendChart");
+    if (!chartContainer) {
+        console.error('Chart container not found');
+        return;
+    }
+    
+    // Chart options for yearly view - ALWAYS BAR CHART
     const options = {
         series: data.series || [],
         chart: {
-            type: 'line',
+            type: 'bar', // Always bar for yearly
             height: 450,
+            stacked: false,
             animations: {
                 enabled: true,
                 easing: 'easeinout',
@@ -258,19 +559,24 @@ function renderChart(data) {
                 }
             }
         },
-        colors: ['#696cff', '#71dd37', '#ff3e1d', '#03c3ec', '#ffab00'],
-        stroke: {
-            curve: 'smooth',
-            width: 3
-        },
-        markers: {
-            size: 5,
-            hover: {
-                size: 7
+        colors: ['#696cff', '#71dd37', '#ff3e1d', '#03c3ec', '#ffab00', '#8592a3', '#f97316', '#06b6d4', '#ec4899', '#10b981'],
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '65%',
+                endingShape: 'rounded',
+                dataLabels: {
+                    position: 'top'
+                }
             }
         },
         dataLabels: {
             enabled: false
+        },
+        stroke: {
+            show: true,
+            width: 2,
+            colors: ['transparent']
         },
         xaxis: {
             categories: data.categories || [],
@@ -292,13 +598,132 @@ function renderChart(data) {
             },
             labels: {
                 formatter: function(val) {
-                    if (val === 0) return 'Rp 0';
-                    if (val >= 1000000000) {
-                        return 'Rp ' + (val / 1000000000).toFixed(1) + ' M';
-                    } else if (val >= 1000000) {
-                        return 'Rp ' + (val / 1000000).toFixed(1) + ' Jt';
-                    }
+                    return formatCurrencyShort(val);
+                }
+            }
+        },
+        fill: {
+            opacity: 1
+        },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'left',
+            floating: false,
+            offsetY: -10,
+            itemMargin: {
+                horizontal: 10,
+                vertical: 5
+            }
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            y: {
+                formatter: function(val) {
+                    if (!val || val === 0) return 'Rp 0';
                     return 'Rp ' + new Intl.NumberFormat('id-ID').format(val);
+                }
+            }
+        },
+        grid: {
+            borderColor: '#e7e7e7',
+            strokeDashArray: 5
+        }
+    };
+    
+    // Create new chart
+    try {
+        chart = new ApexCharts(chartContainer, options);
+        chart.render();
+        
+        // Calculate growth analysis
+        calculateGrowthAnalysis(data);
+    } catch (error) {
+        console.error('Error creating yearly chart:', error);
+        showError('Gagal membuat chart: ' + error.message);
+    }
+}
+
+/**
+ * Render monthly chart (bar or line based on filter)
+ */
+function renderMonthlyChart(data) {
+    console.log('Rendering monthly chart with data:', data);
+    
+    // Destroy existing chart
+    destroyExistingChart();
+    
+    const chartContainer = document.querySelector("#trendChart");
+    if (!chartContainer) {
+        console.error('Chart container not found');
+        return;
+    }
+    
+    // Determine chart type based on whether month filter is active
+    const hasMonthFilter = appState.month && appState.month !== '';
+    const chartType = hasMonthFilter ? 'bar' : 'line';
+    
+    console.log('Monthly chart type:', chartType, 'Has filter:', hasMonthFilter);
+    
+    // Chart options for monthly view
+    const options = {
+        series: data.series || [],
+        chart: {
+            type: chartType,
+            height: 450,
+            toolbar: {
+                show: true
+            },
+            animations: {
+                enabled: true,
+                easing: 'easeinout',
+                speed: 800
+            }
+        },
+        colors: ['#696cff', '#71dd37', '#ff3e1d', '#03c3ec', '#ffab00'],
+        stroke: {
+            curve: chartType === 'line' ? 'smooth' : 'straight',
+            width: chartType === 'line' ? 3 : 1
+        },
+        markers: {
+            size: chartType === 'line' ? 5 : 0,
+            hover: {
+                size: chartType === 'line' ? 7 : 0
+            }
+        },
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '65%',
+                endingShape: 'rounded'
+            }
+        },
+        dataLabels: {
+            enabled: false
+        },
+        xaxis: {
+            categories: data.categories || [],
+            title: {
+                text: hasMonthFilter ? 'Tahun' : 'Bulan',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            }
+        },
+        yaxis: {
+            title: {
+                text: hasMonthFilter ? 
+                    `Penerimaan Bulan ${data.monthName || ''}` : 
+                    'Jumlah Penerimaan',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(val) {
+                    return formatCurrencyShort(val);
                 }
             }
         },
@@ -319,117 +744,160 @@ function renderChart(data) {
         grid: {
             borderColor: '#e7e7e7',
             strokeDashArray: 5
-        },
-        noData: {
-            text: 'Tidak ada data untuk ditampilkan',
-            align: 'center',
-            verticalAlign: 'middle',
-            offsetX: 0,
-            offsetY: 0,
-            style: {
-                color: '#999',
-                fontSize: '16px'
-            }
         }
     };
     
-    // Create new chart
     try {
         chart = new ApexCharts(chartContainer, options);
         chart.render();
         
-        // Calculate growth analysis if we have data
-        if (data.series && data.series.length > 0) {
+        // Calculate growth analysis for monthly data
+        if (hasMonthFilter) {
             calculateGrowthAnalysis(data);
-        } else {
-            resetGrowthAnalysis();
         }
     } catch (error) {
-        console.error('Error creating chart:', error);
+        console.error('Error creating monthly chart:', error);
+        showError('Gagal membuat chart: ' + error.message);
     }
 }
 
 /**
- * Handle view toggle
+ * Show no data message in chart container
+ */
+function showNoDataMessage() {
+    const chartContainer = document.querySelector("#trendChart");
+    if (chartContainer) {
+        chartContainer.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bx bx-bar-chart-alt-2 bx-lg text-muted mb-3 d-block"></i>
+                <h5 class="text-muted">Tidak Ada Data</h5>
+                <p class="text-muted">Tidak ada data penerimaan untuk periode yang dipilih</p>
+                <button class="btn btn-primary mt-3" onclick="handleReloadData()">
+                    <i class="bx bx-refresh me-1"></i> Muat Ulang
+                </button>
+            </div>
+        `;
+    }
+    
+    // Reset summary cards
+    resetGrowthAnalysis();
+}
+
+// ========================================
+// EVENT HANDLERS
+// ========================================
+
+/**
+ * Handle view toggle between yearly and monthly
  */
 function handleViewToggle(event) {
     const button = event.target.closest('button');
+    if (!button) return;
+    
     const view = button.dataset.view;
     
-    if (view === currentView) return;
+    if (view === appState.view) {
+        console.log('View already active:', view);
+        return;
+    }
     
-    console.log('View toggled to:', view);
+    console.log('Toggling view to:', view);
     
-    // Update UI
-    document.querySelectorAll('#viewToggle button').forEach(btn => {
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn-outline-primary');
+    // Update state with new view
+    updateState({
+        view: view,
+        month: view === 'monthly' ? appState.month : '' // Keep month for monthly, clear for yearly
     });
-    button.classList.remove('btn-outline-primary');
-    button.classList.add('btn-primary');
-    
-    // Show/hide month selector
-    const monthSelector = document.getElementById('monthSelector');
-    const monthlyTable = document.getElementById('monthlyComparisonTable');
-    
-    if (view === 'monthly') {
-        if (monthSelector) monthSelector.style.display = 'block';
-        if (monthlyTable) monthlyTable.style.display = 'block';
-    } else {
-        if (monthSelector) monthSelector.style.display = 'none';
-        if (monthlyTable) monthlyTable.style.display = 'none';
-    }
-    
-    currentView = view;
-    
-    // Reload data
-    if (currentCategoryId) {
-        loadChartData('category', currentCategoryId);
-    } else {
-        loadChartData('overview');
-    }
 }
 
 /**
  * Handle month change
  */
 function handleMonthChange(event) {
-    currentMonth = parseInt(event.target.value);
-    console.log('Month changed to:', currentMonth);
+    const month = parseInt(event.target.value);
     
-    if (currentCategoryId) {
-        loadChartData('category', currentCategoryId);
-    } else {
-        loadChartData('overview');
+    if (month === appState.month) {
+        console.log('Month already selected:', month);
+        return;
     }
+    
+    console.log('Month changed to:', month);
+    updateState({ month: month });
 }
 
 /**
  * Handle year range change
  */
 function handleYearChange(event) {
-    const button = event.target;
+    const button = event.target.closest('button');
+    if (!button) return;
+    
     const years = parseInt(button.dataset.years);
     
+    if (years === appState.yearRange) {
+        console.log('Year range already selected:', years);
+        return;
+    }
+    
     console.log('Year range changed to:', years);
+    updateState({ yearRange: years });
+}
+
+/**
+ * Handle reset button click
+ */
+function handleReset() {
+    console.log('Resetting to overview...');
     
-    // Update UI
-    document.querySelectorAll('#yearButtons button').forEach(btn => {
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn-outline-primary');
+    updateState({
+        categoryId: '',
+        categoryName: '',
+        categoryLevel: null
     });
-    button.classList.remove('btn-outline-primary');
-    button.classList.add('btn-primary');
+}
+
+/**
+ * Handle reload data button
+ */
+function handleReloadData() {
+    console.log('Reloading data...');
     
-    currentYearRange = years;
-    
-    // Reload data
-    if (currentCategoryId) {
-        loadChartData('category', currentCategoryId);
+    if (appState.categoryId) {
+        loadChartData('category', appState.categoryId, true);
     } else {
-        loadChartData('overview');
+        loadChartData('overview', null, true);
     }
 }
+
+/**
+ * Handle keyboard shortcuts
+ */
+function handleKeyboardShortcuts(e) {
+    // Ctrl/Cmd + K for search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchBtn = document.getElementById('searchModalBtn');
+        if (searchBtn) searchBtn.click();
+    }
+    
+    // Ctrl/Cmd + R for reset (if category is selected)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r' && appState.categoryId) {
+        e.preventDefault();
+        handleReset();
+    }
+    
+    // Ctrl/Cmd + Shift + C for clear cache (dev only)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            e.preventDefault();
+            clearCache();
+        }
+    }
+}
+
+// ========================================
+// SEARCH FUNCTIONS
+// ========================================
 
 /**
  * Handle modal search input
@@ -445,14 +913,14 @@ function handleModalSearchInput(event) {
         document.getElementById('modalSearchResults').innerHTML = `
             <div class="text-center text-muted py-4">
                 <i class="bx bx-search bx-lg"></i>
-                <p class="mt-2">Mulai mengetik untuk mencari kategori</p>
+                <p class="mt-2">Mulai mengetik untuk mencari kategori (minimal 2 karakter)</p>
             </div>
         `;
         return;
     }
     
     document.getElementById('modalSearchResults').innerHTML = `
-        <div class="search-loading">
+        <div class="text-center py-4">
             <div class="spinner-border spinner-border-sm text-primary" role="status">
                 <span class="visually-hidden">Loading...</span>
             </div>
@@ -466,12 +934,14 @@ function handleModalSearchInput(event) {
 }
 
 /**
- * Search categories
+ * Search categories via API
  */
 async function searchCategoriesModal(searchTerm) {
     try {
         const response = await fetch(`${API_SEARCH}?q=${encodeURIComponent(searchTerm)}`);
         const result = await response.json();
+        
+        console.log('Search results:', result);
         
         if (result.success && result.data.length > 0) {
             displayModalSearchResults(result.data);
@@ -490,7 +960,7 @@ async function searchCategoriesModal(searchTerm) {
 }
 
 /**
- * Display search results
+ * Display search results in modal
  */
 function displayModalSearchResults(results) {
     const container = document.getElementById('modalSearchResults');
@@ -505,23 +975,50 @@ function displayModalSearchResults(results) {
         return;
     }
     
-    let html = '';
+    // Group results by level
+    const groupedByLevel = {};
     results.forEach(result => {
-        html += `
-            <div class="search-result-item" data-id="${result.id}" data-nama="${result.nama}">
-                <div class="result-kode">${result.kode}</div>
-                <div class="result-nama">${result.nama}</div>
-            </div>
-        `;
+        if (!groupedByLevel[result.level]) {
+            groupedByLevel[result.level] = [];
+        }
+        groupedByLevel[result.level].push(result);
+    });
+    
+    let html = '';
+    
+    // Display results grouped by level
+    Object.keys(groupedByLevel).sort().forEach(level => {
+        html += `<div class="mb-3">`;
+        html += `<h6 class="text-muted mb-2">Level ${level}</h6>`;
+        
+        groupedByLevel[level].forEach(result => {
+            const levelColor = getLevelColor(result.level);
+            html += `
+                <div class="search-result-item mb-2" data-id="${result.id}" data-nama="${result.nama}" data-level="${result.level}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="result-kode">${result.kode}</div>
+                            <div class="result-nama">${result.nama}</div>
+                        </div>
+                        <span class="badge bg-${levelColor}">Level ${result.level}</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `</div>`;
     });
     
     container.innerHTML = html;
     
+    // Add click handlers
     container.querySelectorAll('.search-result-item').forEach(item => {
         item.addEventListener('click', function() {
-            const id = this.dataset.id;
-            const nama = this.dataset.nama;
-            selectCategoryFromModal({ id, nama });
+            selectCategoryFromModal({
+                id: this.dataset.id,
+                nama: this.dataset.nama,
+                level: parseInt(this.dataset.level)
+            });
         });
     });
 }
@@ -532,149 +1029,34 @@ function displayModalSearchResults(results) {
 function selectCategoryFromModal(category) {
     console.log('Category selected:', category);
     
-    currentCategoryId = category.id;
-    
-    // Update UI elements if they exist
-    const categoryTitle = document.getElementById('categoryTitle');
-    if (categoryTitle) {
-        categoryTitle.textContent = category.nama;
-    }
-    
-    const chartTitle = document.getElementById('chartTitle');
-    if (chartTitle) {
-        chartTitle.textContent = category.nama;
-    }
-    
-    const resetBtn = document.getElementById('resetBtn');
-    if (resetBtn) {
-        resetBtn.style.display = 'inline-block';
-    }
+    // Update state
+    updateState({
+        categoryId: category.id,
+        categoryName: category.nama,
+        categoryLevel: category.level
+    });
     
     // Hide modal
     if (searchModal) {
         searchModal.hide();
     }
-    
-    // Load category data
-    loadChartData('category', category.id);
 }
 
 /**
- * Handle reset
+ * Update category info from API response
  */
-function handleReset() {
-    currentCategoryId = '';
-    document.getElementById('categoryTitle').textContent = 'Overview - Semua Kategori';
-    document.getElementById('chartTitle').textContent = 'Overview - Semua Kategori';
-    
-    const resetBtn = document.getElementById('resetBtn');
-    if (resetBtn) {
-        resetBtn.style.display = 'none';
+function updateCategoryInfo(categoryInfo) {
+    if (categoryInfo) {
+        updateState({
+            categoryName: categoryInfo.nama,
+            categoryLevel: categoryInfo.level
+        }, false); // Don't reload data
     }
-    
-    loadChartData('overview');
 }
 
-/**
- * Render monthly chart
- */
-function renderMonthlyChart(data) {
-    console.log('Rendering monthly chart:', data);
-    
-    if (!data || !data.series || !data.categories) {
-        data = {
-            categories: [],
-            series: []
-        };
-    }
-    
-    if (chart) {
-        chart.destroy();
-    }
-    
-    const options = {
-        series: data.series || [],
-        chart: {
-            type: 'bar',
-            height: 450,
-            toolbar: {
-                show: true
-            }
-        },
-        plotOptions: {
-            bar: {
-                horizontal: false,
-                columnWidth: '65%',
-                endingShape: 'rounded'
-            }
-        },
-        dataLabels: {
-            enabled: false
-        },
-        colors: ['#696cff', '#71dd37', '#ff3e1d', '#03c3ec', '#ffab00'],
-        xaxis: {
-            categories: data.categories || [],
-            title: {
-                text: 'Tahun'
-            }
-        },
-        yaxis: {
-            title: {
-                text: `Penerimaan Bulan ${data.monthName || ''}`
-            },
-            labels: {
-                formatter: function(val) {
-                    if (val === 0) return 'Rp 0';
-                    if (val >= 1000000000) {
-                        return 'Rp ' + (val / 1000000000).toFixed(1) + ' M';
-                    }
-                    return 'Rp ' + (val / 1000000).toFixed(0) + ' Jt';
-                }
-            }
-        },
-        legend: {
-            position: 'top',
-            horizontalAlign: 'left'
-        },
-        tooltip: {
-            shared: true,
-            intersect: false,
-            y: {
-                formatter: function(val) {
-                    if (!val || val === 0) return 'Rp 0';
-                    return 'Rp ' + new Intl.NumberFormat('id-ID').format(val);
-                }
-            }
-        }
-    };
-    
-    chart = new ApexCharts(document.querySelector("#trendChart"), options);
-    chart.render();
-}
-
-/**
- * Render monthly table
- */
-function renderMonthlyTable(data) {
-    console.log('Rendering monthly table:', data);
-    // Implementation for monthly table
-}
-
-/**
- * Update summary
- */
-function updateSummary(summary) {
-    console.log('Updating summary:', summary);
-    // Implementation for summary update
-}
-
-/**
- * Update monthly summary
- */
-function updateMonthlySummary(summary) {
-    console.log('Updating monthly summary:', summary);
-    // Implementation for monthly summary
-}
+// ========================================
+// ANALYSIS FUNCTIONS
+// ========================================
 
 /**
  * Calculate growth analysis from chart data
@@ -688,281 +1070,305 @@ function calculateGrowthAnalysis(data) {
     }
     
     const years = data.categories || [];
+    let tableData = [];
+    let overallGrowth = 0;
+    let bestPerformer = { name: '-', value: 0 };
     
-    // Jika hanya satu series (single category)
-    if (data.series.length === 1) {
-        const serie = data.series[0];
-        const values = serie.data || [];
+    // Calculate total values per year
+    const yearlyTotals = {};
+    years.forEach(year => {
+        yearlyTotals[year] = 0;
+    });
+    
+    data.series.forEach(serie => {
+        serie.data.forEach((value, index) => {
+            if (years[index]) {
+                yearlyTotals[years[index]] += value || 0;
+            }
+        });
+    });
+    
+    // Convert to array for easier processing
+    const totalsArray = years.map(year => yearlyTotals[year]);
+    
+    // Calculate growth between first and last year
+    if (totalsArray.length >= 2) {
+        const firstValue = totalsArray[0];
+        const lastValue = totalsArray[totalsArray.length - 1];
         
-        if (values.length < 2) {
-            resetGrowthAnalysis();
-            return;
-        }
-        
-        // Calculate growth between first and last year
-        const firstValue = values[0];
-        const lastValue = values[values.length - 1];
-        
-        let totalGrowth = 0;
         if (firstValue > 0) {
-            totalGrowth = ((lastValue - firstValue) / firstValue) * 100;
+            overallGrowth = ((lastValue - firstValue) / firstValue) * 100;
         } else if (lastValue > 0) {
-            totalGrowth = 100;
+            overallGrowth = 100;
         }
-        
-        // Calculate year-over-year growth rates
-        const growthRates = [];
-        for (let i = 1; i < values.length; i++) {
-            if (values[i-1] > 0) {
-                const growth = ((values[i] - values[i-1]) / values[i-1]) * 100;
-                growthRates.push(growth);
-            }
-        }
-        
-        // Calculate average growth (CAGR)
-        let avgGrowth = 0;
-        if (firstValue > 0 && values.length > 1) {
-            const years = values.length - 1;
-            avgGrowth = (Math.pow(lastValue / firstValue, 1/years) - 1) * 100;
-        }
-        
-        // Find best performing year
-        let maxValue = Math.max(...values);
-        let bestYearIndex = values.indexOf(maxValue);
-        let bestYear = years[bestYearIndex] || '-';
-        
-        // Update summary cards
-        updateSummaryCards({
-            totalGrowth: totalGrowth,
-            avgGrowth: avgGrowth,
-            bestPerformer: bestYear,
-            trendStatus: determineTrendStatus(totalGrowth)
-        });
-        
-        // Create detail table
-        createSingleCategoryTable(years, values, serie.name);
-        
-    } else {
-        // Multiple series (overview mode)
-        let totalFirstYear = 0;
-        let totalLastYear = 0;
-        const seriesGrowth = [];
-        
-        data.series.forEach(serie => {
-            const values = serie.data || [];
-            if (values.length > 0) {
-                const firstValue = values[0] || 0;
-                const lastValue = values[values.length - 1] || 0;
-                
-                totalFirstYear += firstValue;
-                totalLastYear += lastValue;
-                
-                let growth = 0;
-                if (firstValue > 0) {
-                    growth = ((lastValue - firstValue) / firstValue) * 100;
-                }
-                
-                seriesGrowth.push({
-                    name: serie.name,
-                    growth: growth,
-                    firstValue: firstValue,
-                    lastValue: lastValue
-                });
-            }
-        });
-        
-        // Calculate total growth
-        let totalGrowth = 0;
-        if (totalFirstYear > 0) {
-            totalGrowth = ((totalLastYear - totalFirstYear) / totalFirstYear) * 100;
-        }
-        
-        // Find best performer
-        let bestPerformer = { name: '-', growth: -Infinity };
-        seriesGrowth.forEach(item => {
-            if (item.growth > bestPerformer.growth) {
-                bestPerformer = { name: item.name, growth: item.growth };
-            }
-        });
-        
-        // Calculate average growth
-        const avgGrowth = seriesGrowth.length > 0 
-            ? seriesGrowth.reduce((sum, item) => sum + item.growth, 0) / seriesGrowth.length
-            : 0;
-        
-        // Update summary cards
-        updateSummaryCards({
-            totalGrowth: totalGrowth,
-            avgGrowth: avgGrowth,
-            bestPerformer: bestPerformer.name,
-            trendStatus: determineTrendStatus(totalGrowth)
-        });
-        
-        // Create overview table
-        createOverviewTable(seriesGrowth);
     }
-}
-
-/**
- * Create table for single category analysis
- */
-function createSingleCategoryTable(years, values, categoryName) {
-    const container = document.getElementById('growthTableContainer');
-    const tbody = document.getElementById('growthTableBody');
     
-    if (!container || !tbody) return;
-    
-    container.style.display = 'block';
-    tbody.innerHTML = '';
-    
-    // Add header row
-    const headerRow = document.createElement('tr');
-    headerRow.innerHTML = `
-        <td colspan="5" class="text-center fw-bold bg-light">${categoryName}</td>
-    `;
-    tbody.appendChild(headerRow);
-    
-    // Add year rows
+    // Calculate year-over-year growth
     for (let i = 0; i < years.length; i++) {
-        const row = document.createElement('tr');
-        const value = values[i] || 0;
-        
-        let growthCell = '<td class="text-end text-muted">-</td>';
-        let trendCell = '<td class="text-center">-</td>';
-        let descCell = '<td>Tahun dasar</td>';
+        const value = totalsArray[i];
+        let growth = 0;
+        let trend = 'stable';
+        let description = 'Tahun dasar';
         
         if (i > 0) {
-            const prevValue = values[i-1] || 0;
-            let growth = 0;
-            
+            const prevValue = totalsArray[i - 1];
             if (prevValue > 0) {
                 growth = ((value - prevValue) / prevValue) * 100;
             } else if (value > 0) {
                 growth = 100;
             }
             
-            growthCell = `<td class="text-end ${getGrowthClass(growth)}">${formatGrowthValue(growth)}</td>`;
-            trendCell = `<td class="text-center">${getTrendBadge(growth)}</td>`;
-            descCell = `<td>${getGrowthDescription(growth)}</td>`;
+            trend = growth > 0 ? 'up' : growth < 0 ? 'down' : 'stable';
+            description = getGrowthDescription(growth);
         }
         
-        row.innerHTML = `
-            <td><strong>${years[i]}</strong></td>
-            <td class="text-end">${formatCurrency(value)}</td>
-            ${growthCell}
-            ${trendCell}
-            ${descCell}
-        `;
+        // Track best performing year
+        if (value > bestPerformer.value) {
+            bestPerformer = { name: years[i], value: value };
+        }
         
-        tbody.appendChild(row);
+        tableData.push({
+            year: years[i],
+            value: value,
+            growth: growth,
+            trend: trend,
+            description: description
+        });
     }
+    
+    // Calculate average growth (CAGR)
+    let avgGrowth = 0;
+    if (totalsArray[0] > 0 && totalsArray.length > 1) {
+        const years = totalsArray.length - 1;
+        avgGrowth = (Math.pow(totalsArray[totalsArray.length - 1] / totalsArray[0], 1/years) - 1) * 100;
+    }
+    
+    // Update summary cards
+    updateSummaryCards({
+        totalGrowth: overallGrowth,
+        avgGrowth: avgGrowth,
+        bestPerformer: bestPerformer.name,
+        trendStatus: determineTrendStatus(overallGrowth)
+    });
+    
+    // Update growth table
+    updateGrowthTable(tableData);
 }
 
 /**
- * Create overview table for multiple categories
+ * Update growth table
  */
-function createOverviewTable(seriesGrowth) {
-    const container = document.getElementById('growthTableContainer');
+function updateGrowthTable(data) {
     const tbody = document.getElementById('growthTableBody');
+    if (!tbody) return;
     
-    if (!container || !tbody) return;
-    
-    container.style.display = 'block';
     tbody.innerHTML = '';
     
-    // Sort by growth descending
-    seriesGrowth.sort((a, b) => b.growth - a.growth);
-    
-    seriesGrowth.forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td><strong>${item.name}</strong></td>
-            <td class="text-end">${formatCurrency(item.lastValue)}</td>
-            <td class="text-end ${getGrowthClass(item.growth)}">${formatGrowthValue(item.growth)}</td>
-            <td class="text-center">${getTrendBadge(item.growth)}</td>
-            <td>${getGrowthDescription(item.growth)}</td>
+    data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${row.year}</strong></td>
+            <td class="text-end">${formatCurrency(row.value)}</td>
+            <td class="text-end ${getGrowthClass(row.growth)}">${formatGrowthValue(row.growth)}</td>
+            <td class="text-center">${getTrendBadge(row.trend)}</td>
+            <td>${row.description}</td>
         `;
-        tbody.appendChild(row);
+        tbody.appendChild(tr);
     });
 }
 
 /**
- * Update summary cards dengan animasi
+ * Render monthly comparison table
+ */
+function renderMonthlyTable(data) {
+    console.log('Rendering monthly table:', data);
+    
+    const comparisonTable = document.getElementById('monthlyComparisonTable');
+    if (!comparisonTable) return;
+    
+    const monthName = data.monthName || 'Bulan';
+    const monthNameEl = document.getElementById('comparisonMonthName');
+    if (monthNameEl) {
+        monthNameEl.textContent = monthName;
+    }
+    
+    const tableHeader = document.getElementById('monthlyTableHeader');
+    const tableBody = document.getElementById('monthlyTableBody');
+    
+    if (!tableHeader || !tableBody) return;
+    
+    // Build header
+    let headerHTML = '<tr><th>Kategori</th>';
+    data.categories.forEach(year => {
+        headerHTML += `<th class="text-end">${year}</th>`;
+    });
+    headerHTML += '<th class="text-end">Growth</th></tr>';
+    tableHeader.innerHTML = headerHTML;
+    
+    // Build body
+    tableBody.innerHTML = '';
+    data.series.forEach(serie => {
+        const tr = document.createElement('tr');
+        let rowHTML = `<td>${serie.name}</td>`;
+        
+        serie.data.forEach(value => {
+            rowHTML += `<td class="text-end">${formatCurrency(value)}</td>`;
+        });
+        
+        // Calculate growth
+        let growth = 0;
+        if (serie.data.length >= 2) {
+            const first = serie.data[0];
+            const last = serie.data[serie.data.length - 1];
+            if (first > 0) {
+                growth = ((last - first) / first) * 100;
+            }
+        }
+        
+        rowHTML += `<td class="text-end ${getGrowthClass(growth)}">${formatGrowthValue(growth)}</td>`;
+        tr.innerHTML = rowHTML;
+        tableBody.appendChild(tr);
+    });
+}
+
+/**
+ * Update summary cards and insights
+ */
+function updateSummary(summary) {
+    console.log('Updating summary:', summary);
+    
+    if (!summary) return;
+    
+    // Update growth insights
+    const insightsContainer = document.getElementById('growthInsights');
+    if (insightsContainer) {
+        let insightsHTML = '';
+        
+        // Top performers
+        if (summary.top_performers && summary.top_performers.length > 0) {
+            insightsHTML += '<div class="insight-card success mb-2">';
+            insightsHTML += '<i class="bx bx-trending-up"></i>';
+            insightsHTML += '<div>';
+            insightsHTML += '<strong>Top Performers:</strong><br>';
+            summary.top_performers.forEach((item, index) => {
+                if (index < 3) {
+                    insightsHTML += `${index + 1}. ${item.nama} (${item.growth.toFixed(1)}%)<br>`;
+                }
+            });
+            insightsHTML += '</div></div>';
+        }
+        
+        // Declining categories
+        if (summary.declining_categories && summary.declining_categories.length > 0) {
+            insightsHTML += '<div class="insight-card warning">';
+            insightsHTML += '<i class="bx bx-trending-down"></i>';
+            insightsHTML += '<div>';
+            insightsHTML += '<strong>Perlu Perhatian:</strong><br>';
+            summary.declining_categories.forEach((item, index) => {
+                if (index < 3) {
+                    insightsHTML += `${item.nama} (${item.growth.toFixed(1)}%)<br>`;
+                }
+            });
+            insightsHTML += '</div></div>';
+        }
+        
+        insightsContainer.innerHTML = insightsHTML;
+    }
+}
+
+/**
+ * Update monthly summary
+ */
+function updateMonthlySummary(summary) {
+    updateSummary(summary);
+}
+
+/**
+ * Update summary cards
  */
 function updateSummaryCards(data) {
     // Total Growth
     const totalGrowthEl = document.getElementById('totalGrowthValue');
     if (totalGrowthEl) {
-        totalGrowthEl.innerHTML = formatGrowthValue(data.totalGrowth);
-        totalGrowthEl.className = 'growth-card-value ' + getGrowthClass(data.totalGrowth);
+        const icon = data.totalGrowth > 0 ? '↑' : data.totalGrowth < 0 ? '↓' : '→';
+        totalGrowthEl.innerHTML = `<span class="value-text">${data.totalGrowth.toFixed(1)}% ${icon}</span>`;
     }
     
     // Average Growth
     const avgGrowthEl = document.getElementById('avgGrowthValue');
     if (avgGrowthEl) {
-        avgGrowthEl.innerHTML = formatGrowthValue(data.avgGrowth);
-        avgGrowthEl.className = 'growth-card-value ' + getGrowthClass(data.avgGrowth);
+        const icon = data.avgGrowth > 0 ? '↑' : data.avgGrowth < 0 ? '↓' : '→';
+        avgGrowthEl.innerHTML = `<span class="value-text">${data.avgGrowth.toFixed(1)}% ${icon}</span>`;
     }
     
     // Best Performer
     const bestPerformerEl = document.getElementById('bestPerformerValue');
     if (bestPerformerEl) {
-        bestPerformerEl.textContent = data.bestPerformer;
-        bestPerformerEl.className = 'growth-card-value';
+        bestPerformerEl.innerHTML = `<span class="value-text">${data.bestPerformer}</span>`;
     }
     
     // Trend Status
     const statusEl = document.getElementById('trendStatusValue');
     if (statusEl) {
-        statusEl.innerHTML = data.trendStatus;
-        statusEl.className = 'growth-card-value';
+        statusEl.innerHTML = `<span class="value-text">${data.trendStatus}</span>`;
     }
 }
 
 /**
- * Helper function to format growth value
+ * Reset growth analysis display
  */
+function resetGrowthAnalysis() {
+    updateSummaryCards({
+        totalGrowth: 0,
+        avgGrowth: 0,
+        bestPerformer: '-',
+        trendStatus: '<span class="text-muted">-</span>'
+    });
+    
+    const tbody = document.getElementById('growthTableBody');
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted py-5">
+                    <i class="bx bx-bar-chart-alt-2 bx-lg mb-3 d-block"></i>
+                    Tidak ada data untuk ditampilkan
+                </td>
+            </tr>
+        `;
+    }
+}
+
+// ========================================
+// UTILITY & HELPER FUNCTIONS
+// ========================================
+
 function formatGrowthValue(growth) {
-    const value = growth.toFixed(1);
-    const icon = growth > 0 ? '↑' : growth < 0 ? '↓' : '→';
-    return `${value}% ${icon}`;
+    return `${growth.toFixed(1)}%`;
 }
 
-/**
- * Helper function to get growth class
- */
 function getGrowthClass(growth) {
-    if (growth > 0) return 'growth-positive';
-    if (growth < 0) return 'growth-negative';
-    return 'growth-neutral';
+    if (growth > 0) return 'growth-positive text-success';
+    if (growth < 0) return 'growth-negative text-danger';
+    return 'growth-neutral text-muted';
 }
 
-/**
- * Helper function to get trend badge
- */
-function getTrendBadge(growth) {
-    if (growth > 0) {
-        return '<span class="trend-badge trend-up"><i class="bx bx-trending-up me-1"></i>Naik</span>';
-    } else if (growth < 0) {
-        return '<span class="trend-badge trend-down"><i class="bx bx-trending-down me-1"></i>Turun</span>';
+function getTrendBadge(trend) {
+    if (trend === 'up') {
+        return '<span class="trend-badge trend-up"><i class="bx bx-trending-up"></i> Naik</span>';
+    } else if (trend === 'down') {
+        return '<span class="trend-badge trend-down"><i class="bx bx-trending-down"></i> Turun</span>';
     }
-    return '<span class="trend-badge trend-stable"><i class="bx bx-minus me-1"></i>Stabil</span>';
+    return '<span class="trend-badge trend-stable"><i class="bx bx-minus"></i> Stabil</span>';
 }
 
-/**
- * Helper function to determine trend status
- */
 function determineTrendStatus(growth) {
-    if (growth > 10) return '<span class="text-success">Sangat Baik</span>';
-    if (growth > 0) return '<span class="text-info">Positif</span>';
+    if (growth > 10) return '<span class="text-success fw-bold">Sangat Baik</span>';
+    if (growth > 0) return '<span class="text-info fw-bold">Positif</span>';
     if (growth === 0) return '<span class="text-muted">Stabil</span>';
-    if (growth > -10) return '<span class="text-warning">Perlu Perhatian</span>';
-    return '<span class="text-danger">Kritis</span>';
+    if (growth > -10) return '<span class="text-warning fw-bold">Perlu Perhatian</span>';
+    return '<span class="text-danger fw-bold">Kritis</span>';
 }
 
-/**
- * Helper function to get growth description
- */
 function getGrowthDescription(growth) {
     if (growth > 20) return 'Pertumbuhan sangat tinggi';
     if (growth > 10) return 'Pertumbuhan baik';
@@ -972,88 +1378,40 @@ function getGrowthDescription(growth) {
     return 'Penurunan signifikan';
 }
 
-/**
- * Reset growth analysis
- */
-function resetGrowthAnalysis() {
-    updateSummaryCards({
-        totalGrowth: 0,
-        avgGrowth: 0,
-        bestPerformer: '-',
-        trendStatus: '-'
-    });
-    
-    const container = document.getElementById('growthTableContainer');
-    if (container) container.style.display = 'none';
-}
-
-/**
- * Update summary cards
- */
-function updateSummaryCards(data) {
-    const elements = {
-        'totalGrowthValue': formatGrowthValue(data.totalGrowth),
-        'avgGrowthValue': formatGrowthValue(data.avgGrowth),
-        'bestPerformerValue': data.bestPerformer,
-        'trendStatusValue': data.trendStatus
-    };
-    
-    Object.entries(elements).forEach(([id, value]) => {
-        const el = document.getElementById(id);
-        if (el) {
-            if (id.includes('Growth')) {
-                el.innerHTML = value;
-            } else {
-                el.innerHTML = value;
-            }
-        }
-    });
-}
-
-/**
- * Reset growth analysis
- */
-function resetGrowthAnalysis() {
-    updateSummaryCards({
-        totalGrowth: 0,
-        avgGrowth: 0,
-        bestPerformer: '-',
-        trendStatus: '-'
-    });
-}
-
-/**
- * Helper functions
- */
-function formatGrowthValue(growth) {
-    return `${growth.toFixed(1)}%`;
-}
-
 function formatCurrency(value) {
     if (!value || value === 0) return 'Rp 0';
     
-    // Untuk nilai sangat besar
     if (value >= 1000000000000) { // Trilliun
-        return 'Rp ' + (value / 1000000000000).toFixed(2) + ' T';
+        return 'Rp ' + (value / 1000000000000).toFixed(2).replace('.', ',') + ' T';
     } else if (value >= 1000000000) { // Milliar
-        return 'Rp ' + (value / 1000000000).toFixed(2) + ' M';
+        return 'Rp ' + (value / 1000000000).toFixed(2).replace('.', ',') + ' M';
     } else if (value >= 1000000) { // Juta
-        return 'Rp ' + (value / 1000000).toFixed(2) + ' Jt';
+        return 'Rp ' + (value / 1000000).toFixed(2).replace('.', ',') + ' Jt';
     } else if (value >= 1000) { // Ribu
-        return 'Rp ' + (value / 1000).toFixed(2) + ' Rb';
+        return 'Rp ' + (value / 1000).toFixed(2).replace('.', ',') + ' Rb';
     }
     
     return 'Rp ' + new Intl.NumberFormat('id-ID').format(value);
 }
 
+function formatCurrencyShort(val) {
+    if (val === 0) return 'Rp 0';
+    if (val >= 1000000000) {
+        return 'Rp ' + (val / 1000000000).toFixed(1) + ' M';
+    } else if (val >= 1000000) {
+        return 'Rp ' + (val / 1000000).toFixed(1) + ' Jt';
+    } else if (val >= 1000) {
+        return 'Rp ' + (val / 1000).toFixed(1) + ' Rb';
+    }
+    return 'Rp ' + new Intl.NumberFormat('id-ID').format(val);
+}
+
 function showLoading() {
-    const loadingEl = document.getElementById('loadingChart');
-    if (loadingEl) loadingEl.style.display = 'flex';
+    setLoadingState(true);
 }
 
 function hideLoading() {
-    const loadingEl = document.getElementById('loadingChart');
-    if (loadingEl) loadingEl.style.display = 'none';
+    setLoadingState(false);
 }
 
 function showError(message) {
@@ -1069,37 +1427,78 @@ function hideError() {
     if (errorAlert) errorAlert.style.display = 'none';
 }
 
-// Export for debugging
-window.trendAnalysisDebug = {
-    getCurrentView: () => currentView,
-    getCurrentMonth: () => currentMonth,
-    getCurrentYearRange: () => currentYearRange,
-    getCurrentCategoryId: () => currentCategoryId,
-    getAPIEndpoints: () => ({
-        base: API_BASE,
-        overview: API_OVERVIEW,
-        category: API_CATEGORY,
-        search: API_SEARCH
-    }),
-    testAPI: async () => {
-        const url = `${API_OVERVIEW}?years=${currentYearRange}&view=${currentView}`;
-        console.log('Testing API:', url);
-        try {
-            const response = await fetch(url);
-            console.log('Response status:', response.status);
-            const text = await response.text();
-            console.log('Response text:', text);
-            try {
-                const data = JSON.parse(text);
-                console.log('Parsed data:', data);
-                return data;
-            } catch (e) {
-                console.error('Failed to parse JSON:', e);
-                return text;
-            }
-        } catch (error) {
-            console.error('API Test Failed:', error);
-            return error;
-        }
+// ========================================
+// DEVELOPMENT TOOLS
+// ========================================
+
+/**
+ * Add development tools for testing
+ */
+function addDevelopmentTools() {
+    // Add clear cache button
+    const headerRow = document.querySelector('.row.mb-4 .col-md-4.text-end');
+    if (headerRow) {
+        const clearCacheBtn = document.createElement('button');
+        clearCacheBtn.className = 'btn btn-warning ms-2';
+        clearCacheBtn.innerHTML = '<i class="bx bx-refresh me-1"></i> Clear Cache';
+        clearCacheBtn.onclick = clearCache;
+        headerRow.appendChild(clearCacheBtn);
     }
-};
+    
+    // Export debug functions
+    window.trendAnalysisDebug = {
+        getState: () => appState,
+        getPreviousState: () => previousState,
+        getCurrentChart: () => chart,
+        forceReload: () => loadChartData('overview', null, true),
+        testRaceCondition: async () => {
+            // Test rapid filter changes
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    updateState({ yearRange: (i % 3) + 1 });
+                }, i * 100);
+            }
+        },
+        testChartTypes: () => {
+            console.log('Testing chart type determination:');
+            console.log('Yearly:', determineChartType());
+            appState.view = 'monthly';
+            appState.month = 9;
+            console.log('Monthly with filter:', determineChartType());
+            appState.month = '';
+            console.log('Monthly without filter:', determineChartType());
+        }
+    };
+}
+
+/**
+ * Clear cache function
+ */
+async function clearCache() {
+    try {
+        const response = await fetch(API_CLEAR_CACHE, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Cache berhasil dihapus! Halaman akan dimuat ulang.');
+            window.location.reload();
+        } else {
+            alert('Gagal menghapus cache: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Log initialization complete
+console.log('Trend Analysis v2.0 initialized successfully');
+console.log('Debug tools available at window.trendAnalysisDebug');

@@ -7,6 +7,7 @@ use App\Models\Penerimaan;
 use App\Models\KodeRekening;
 use App\Models\TahunAnggaran;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Create extends Component
 {
@@ -14,21 +15,32 @@ class Create extends Component
     public $kode_rekening_id;
     public $jumlah;
     public $keterangan;
-    public $tahun; // Ubah dari tahun_anggaran_id ke tahun
+    public $tahun;
     
-    public $kodeRekeningLevel5 = [];
+    public $kodeRekeningLevel6 = []; // PERUBAHAN: dari Level5 ke Level6
     public $availableYears = [];
+    
+    // TAMBAHAN: Info SKPD
+    public $userSkpdInfo = '';
     
     protected $rules = [
         'tanggal' => 'required|date',
         'kode_rekening_id' => 'required|exists:kode_rekening,id',
-        'jumlah' => 'required|numeric|min:0',
+        'jumlah' => 'required|numeric', // PERUBAHAN: Hapus min:0 untuk support nilai minus
         'keterangan' => 'nullable|string|max:255',
         'tahun' => 'required|integer|min:2000|max:2100',
     ];
     
     public function mount()
     {
+        // TAMBAHAN: Set user SKPD info
+        $user = auth()->user();
+        if ($user->skpd) {
+            $this->userSkpdInfo = 'Input untuk: ' . $user->skpd->nama_opd;
+        } elseif ($user->isSuperAdmin()) {
+            $this->userSkpdInfo = 'Super Admin - Input untuk BPKPAD';
+        }
+        
         $this->tanggal = date('Y-m-d');
         
         // Ambil tahun dari tahun anggaran aktif
@@ -46,20 +58,36 @@ class Create extends Component
             return redirect()->route('tahun-anggaran.index');
         }
         
-        $this->kodeRekeningLevel5 = KodeRekening::where('level', 5)
-                                               ->where('is_active', true)
-                                               ->orderBy('kode')
-                                               ->get();
+        // PERUBAHAN: Get kode rekening level 6 instead of level 5
+        // Filter based on user's SKPD access if needed
+        $query = KodeRekening::where('level', 6) // PERUBAHAN: dari 5 ke 6
+                             ->where('is_active', true);
+        
+        // TAMBAHAN: Filter kode rekening based on SKPD access (if configured)
+        if ($user->skpd && $user->skpd->kode_rekening_access) {
+            $allowedKodes = $user->skpd->kode_rekening_access;
+            if (!empty($allowedKodes)) {
+                $query->whereIn('id', $allowedKodes);
+            }
+        }
+        
+        $this->kodeRekeningLevel6 = $query->orderBy('kode')->get();
+        
+        Log::info('Penerimaan Create mounted', [
+            'user' => $user->name,
+            'skpd' => $user->skpd ? $user->skpd->nama_opd : 'No SKPD',
+            'available_kode_rekening' => $this->kodeRekeningLevel6->count()
+        ]);
     }
     
     public function save()
     {
         $this->validate();
         
-        // Validasi tambahan: pastikan kode rekening adalah level 5
+        // Validasi tambahan: pastikan kode rekening adalah level 6
         $kodeRekening = KodeRekening::find($this->kode_rekening_id);
-        if ($kodeRekening->level != 5) {
-            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 5.');
+        if ($kodeRekening->level != 6) { // PERUBAHAN: dari 5 ke 6
+            session()->flash('error', 'Penerimaan hanya dapat diinput untuk kode rekening level 6.');
             return;
         }
         
@@ -77,12 +105,33 @@ class Create extends Component
             return;
         }
         
+        // TAMBAHAN: Auto-inject SKPD ID and Created By
+        $user = auth()->user();
+        $skpdId = null;
+        
+        if ($user->skpd_id) {
+            $skpdId = $user->skpd_id;
+        } elseif ($user->isSuperAdmin()) {
+            // Super Admin input untuk BPKPAD
+            $bpkpad = \App\Models\Skpd::where('kode_opd', '5.02.0.00.0.00.05.0000')->first();
+            $skpdId = $bpkpad ? $bpkpad->id : null;
+        }
+        
         Penerimaan::create([
             'tanggal' => $this->tanggal,
             'kode_rekening_id' => $this->kode_rekening_id,
-            'tahun' => $this->tahun, // Simpan tahun langsung
+            'tahun' => $this->tahun,
             'jumlah' => $this->jumlah,
             'keterangan' => $this->keterangan,
+            'skpd_id' => $skpdId,          // TAMBAHAN
+            'created_by' => $user->id,     // TAMBAHAN
+        ]);
+        
+        Log::info('Penerimaan created', [
+            'user' => $user->name,
+            'skpd_id' => $skpdId,
+            'kode_rekening' => $kodeRekening->kode,
+            'jumlah' => $this->jumlah
         ]);
         
         session()->flash('message', 'Data penerimaan berhasil disimpan.');

@@ -9,9 +9,15 @@ class TahunAnggaranSeeder extends Seeder
 {
     public function run()
     {
-        TahunAnggaran::create([
-            'tahun' => 2025,
-            'is_active' => true,
-        ]);
+        TahunAnggaran::firstOrCreate(
+            [
+                'tahun' => 2025,
+                // tambahkan field unik lain kalau ada, misal:
+                // 'jenis_anggaran' => 'murni',
+            ],
+            [
+                'is_active' => true,
+            ]
+        );
     }
 }

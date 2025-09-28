@@ -59,6 +59,10 @@ class Dashboard extends Component
     ];
     
     public $kategoris = [];
+    
+    // TAMBAHAN: Info user dan SKPD
+    public $userInfo = '';
+    public $isSkpdFiltered = false;
 
     public function mount()
     {
@@ -66,40 +70,72 @@ class Dashboard extends Component
         $this->currentMonth = date('n');
         $this->currentQuarter = ceil($this->currentMonth / 3);
         
-        // Load tahun anggaran
-        $this->tahunAnggaranList = TahunAnggaran::where('tahun', $this->currentYear)
-            ->where('is_active', true)
-            ->get();
-            
-        // Set default ke APBD Perubahan jika ada, kalau tidak ke Murni
-        $defaultTahunAnggaran = $this->tahunAnggaranList
-            ->where('jenis_anggaran', 'perubahan')
-            ->first();
-            
-        if (!$defaultTahunAnggaran) {
-            $defaultTahunAnggaran = $this->tahunAnggaranList
-                ->where('jenis_anggaran', 'murni')
-                ->first();
+        // TAMBAHAN: Set user info untuk display
+        $user = auth()->user();
+        if ($user->isSuperAdmin()) {
+            $this->userInfo = 'Dashboard Konsolidasi - Semua SKPD';
+            $this->isSkpdFiltered = false;
+        } elseif ($user->isKepalaBadan()) {
+            $this->userInfo = 'Dashboard Kepala BPKPAD - Semua SKPD';
+            $this->isSkpdFiltered = false;
+        } elseif ($user->skpd) {
+            $this->userInfo = 'Dashboard ' . $user->skpd->nama_opd;
+            $this->isSkpdFiltered = true;
         }
         
-        $this->selectedTahunAnggaran = $defaultTahunAnggaran ? $defaultTahunAnggaran->id : null;
+        // PERBAIKAN: Load semua tahun anggaran yang tersedia
+        $this->tahunAnggaranList = TahunAnggaran::orderBy('tahun', 'desc')
+            ->orderBy('jenis_anggaran', 'desc')
+            ->get();
+            
+        // PERBAIKAN: Cari tahun anggaran yang aktif untuk default selection
+        $activeTahunAnggaran = TahunAnggaran::where('is_active', true)->first();
+        
+        if ($activeTahunAnggaran) {
+            $this->selectedTahunAnggaran = $activeTahunAnggaran->id;
+        } else {
+            $defaultTahunAnggaran = $this->tahunAnggaranList
+                ->where('tahun', $this->currentYear)
+                ->where('jenis_anggaran', 'perubahan')
+                ->first();
+                
+            if (!$defaultTahunAnggaran) {
+                $defaultTahunAnggaran = $this->tahunAnggaranList
+                    ->where('tahun', $this->currentYear)
+                    ->where('jenis_anggaran', 'murni')
+                    ->first();
+            }
+            
+            if (!$defaultTahunAnggaran) {
+                $defaultTahunAnggaran = $this->tahunAnggaranList->first();
+            }
+            
+            $this->selectedTahunAnggaran = $defaultTahunAnggaran ? $defaultTahunAnggaran->id : null;
+        }
         
         $this->loadDashboardData();
     }
 
-    public function updatedSelectedTahunAnggaran()
+    public function updatedSelectedTahunAnggaran($value)
     {
+        // Force refresh dengan value baru
+        $this->selectedTahunAnggaran = $value;
         $this->loadDashboardData();
+        
+        // PERBAIKAN: Dispatch event dengan data chart terbaru
+        $this->dispatch('refreshChart', ['chartData' => $this->chartData]);
     }
 
     public function loadDashboardData()
     {
         if (!$this->selectedTahunAnggaran) {
+            $this->resetDataToZero();
             return;
         }
 
         $tahunAnggaran = TahunAnggaran::find($this->selectedTahunAnggaran);
         if (!$tahunAnggaran) {
+            $this->resetDataToZero();
             return;
         }
 
@@ -115,6 +151,24 @@ class Dashboard extends Component
         // Load data untuk tabel kategori
         $this->loadKategoriData();
     }
+    
+    private function resetDataToZero()
+    {
+        $defaultData = [
+            'realisasi' => 0,
+            'target' => 0,
+            'persentase' => 0,
+            'pagu' => 0,
+            'kurang' => 0
+        ];
+        
+        $this->totalPendapatan = $defaultData;
+        $this->pad = $defaultData;
+        $this->transfer = $defaultData;
+        $this->lainLain = $defaultData;
+        $this->chartData = ['categories' => [], 'series' => []];
+        $this->kategoris = [];
+    }
 
     private function calculateRealisasi($kodePrefix)
     {
@@ -129,6 +183,8 @@ class Dashboard extends Component
                 'kurang' => 0
             ];
         }
+        
+        $selectedYear = $tahunAnggaran->tahun;
         
         // Get kode rekening
         $kodeRekening = KodeRekening::where('kode', $kodePrefix)
@@ -147,62 +203,68 @@ class Dashboard extends Component
 
         // Get all child kode rekening IDs (recursive)
         $kodeRekeningIds = $this->getAllChildIds($kodeRekening->id);
-        $kodeRekeningIds[] = $kodeRekening->id; // Include parent
+        $kodeRekeningIds[] = $kodeRekening->id;
         
         // Get pagu anggaran
         $pagu = TargetAnggaran::where('tahun_anggaran_id', $this->selectedTahunAnggaran)
             ->whereIn('kode_rekening_id', $kodeRekeningIds)
             ->sum('jumlah');
             
-        // FIXED: Calculate cumulative target correctly
-        // Get ALL periods up to current month
+        // Calculate target berdasarkan tahun yang dipilih
+        $useCurrentMonth = ($selectedYear == $this->currentYear) ? $this->currentMonth : 12;
+        $useCurrentQuarter = ceil($useCurrentMonth / 3);
+        
+        // Get ALL periods up to current/selected month
         $targetPeriodes = TargetPeriode::where('tahun_anggaran_id', $this->selectedTahunAnggaran)
-            ->where('bulan_akhir', '<=', $this->currentMonth)
+            ->where('bulan_akhir', '<=', $useCurrentMonth)
             ->orderBy('bulan_awal')
             ->get();
             
         $totalPersentase = 0;
         if ($targetPeriodes->count() > 0) {
-            // Sum all percentages for periods that have ended
             $totalPersentase = $targetPeriodes->sum('persentase');
             
-            // Special case: if we're in the middle of a period, calculate proportionally
             $currentPeriod = TargetPeriode::where('tahun_anggaran_id', $this->selectedTahunAnggaran)
-                ->where('bulan_awal', '<=', $this->currentMonth)
-                ->where('bulan_akhir', '>=', $this->currentMonth)
+                ->where('bulan_awal', '<=', $useCurrentMonth)
+                ->where('bulan_akhir', '>=', $useCurrentMonth)
                 ->first();
                 
             if ($currentPeriod && !$targetPeriodes->contains('id', $currentPeriod->id)) {
-                // We're in the middle of this period, add it
                 $totalPersentase += $currentPeriod->persentase;
             }
         } else {
-            // Fallback to default if no target periode data
             $defaultPersentase = [
-                1 => 15,   // Q1
-                2 => 40,   // Q1 + Q2
-                3 => 70,   // Q1 + Q2 + Q3
-                4 => 100   // Full year
+                1 => 15,
+                2 => 40,
+                3 => 70,
+                4 => 100
             ];
             
-            $totalPersentase = $defaultPersentase[$this->currentQuarter] ?? 100;
+            $totalPersentase = $defaultPersentase[$useCurrentQuarter] ?? 100;
         }
         
         // Calculate target based on cumulative percentage
         $target = ($pagu * $totalPersentase) / 100;
         
-        // Get realisasi (YTD - Year to Date)
-        $realisasi = Penerimaan::whereIn('kode_rekening_id', $kodeRekeningIds)
-            ->whereYear('tanggal', $tahunAnggaran->tahun)
-            ->whereMonth('tanggal', '<=', $this->currentMonth)
-            ->sum('jumlah');
+        // PERBAIKAN: Get realisasi dengan filter tahun yang benar
+        $query = Penerimaan::whereIn('kode_rekening_id', $kodeRekeningIds)
+            ->where('tahun', $selectedYear);  // Gunakan field tahun, bukan whereYear
+            
+        // Hanya filter by month jika tahun yang dipilih adalah tahun sekarang
+        if ($selectedYear == $this->currentYear) {
+            $query = $query->whereMonth('tanggal', '<=', $this->currentMonth);
+        }
+        
+        // Apply SKPD filter
+        $query = $query->filterBySkpd();
+        
+        $realisasi = $query->sum('jumlah');
             
         // Calculate percentage
         $persentase = 0;
         if ($target > 0) {
             $persentase = ($realisasi / $target) * 100;
         } elseif ($target == 0 && $realisasi > 0) {
-            // Special case: if no target but has realization
             $persentase = 100;
         }
         
@@ -244,6 +306,9 @@ class Dashboard extends Component
             return;
         }
         
+        // PERBAIKAN: Gunakan tahun dari tahun anggaran yang dipilih
+        $selectedYear = $tahunAnggaran->tahun;
+        
         // Data untuk 12 bulan
         $months = [];
         $padData = [];
@@ -251,53 +316,53 @@ class Dashboard extends Component
         $lainLainData = [];
         
         for ($i = 1; $i <= 12; $i++) {
-            $months[] = Carbon::create($tahunAnggaran->tahun, $i, 1)->format('M');
+            $months[] = Carbon::create(null, $i, 1)->format('M');
             
-            if ($i <= $this->currentMonth) {
-                // PAD
-                $padKode = KodeRekening::where('kode', '4.1')->first();
-                if ($padKode) {
-                    $padIds = $this->getAllChildIds($padKode->id);
-                    $padIds[] = $padKode->id;
-                    
-                    $padData[] = (int) Penerimaan::whereIn('kode_rekening_id', $padIds)
-                        ->whereYear('tanggal', $tahunAnggaran->tahun)
-                        ->whereMonth('tanggal', $i)
-                        ->sum('jumlah');
-                } else {
-                    $padData[] = 0;
-                }
+            // PAD
+            $padKode = KodeRekening::where('kode', '4.1')->first();
+            if ($padKode) {
+                $padIds = $this->getAllChildIds($padKode->id);
+                $padIds[] = $padKode->id;
                 
-                // Transfer
-                $transferKode = KodeRekening::where('kode', '4.2')->first();
-                if ($transferKode) {
-                    $transferIds = $this->getAllChildIds($transferKode->id);
-                    $transferIds[] = $transferKode->id;
-                    
-                    $transferData[] = (int) Penerimaan::whereIn('kode_rekening_id', $transferIds)
-                        ->whereYear('tanggal', $tahunAnggaran->tahun)
-                        ->whereMonth('tanggal', $i)
-                        ->sum('jumlah');
-                } else {
-                    $transferData[] = 0;
-                }
-                
-                // Lain-lain
-                $lainLainKode = KodeRekening::where('kode', '4.3')->first();
-                if ($lainLainKode) {
-                    $lainLainIds = $this->getAllChildIds($lainLainKode->id);
-                    $lainLainIds[] = $lainLainKode->id;
-                    
-                    $lainLainData[] = (int) Penerimaan::whereIn('kode_rekening_id', $lainLainIds)
-                        ->whereYear('tanggal', $tahunAnggaran->tahun)
-                        ->whereMonth('tanggal', $i)
-                        ->sum('jumlah');
-                } else {
-                    $lainLainData[] = 0;
-                }
+                // PERBAIKAN: Gunakan field tahun yang benar
+                $padData[] = (int) Penerimaan::whereIn('kode_rekening_id', $padIds)
+                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->whereMonth('tanggal', $i)
+                    ->filterBySkpd()
+                    ->sum('jumlah');
             } else {
                 $padData[] = 0;
+            }
+            
+            // Transfer
+            $transferKode = KodeRekening::where('kode', '4.2')->first();
+            if ($transferKode) {
+                $transferIds = $this->getAllChildIds($transferKode->id);
+                $transferIds[] = $transferKode->id;
+                
+                // PERBAIKAN: Gunakan field tahun yang benar
+                $transferData[] = (int) Penerimaan::whereIn('kode_rekening_id', $transferIds)
+                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->whereMonth('tanggal', $i)
+                    ->filterBySkpd()
+                    ->sum('jumlah');
+            } else {
                 $transferData[] = 0;
+            }
+            
+            // Lain-lain
+            $lainLainKode = KodeRekening::where('kode', '4.3')->first();
+            if ($lainLainKode) {
+                $lainLainIds = $this->getAllChildIds($lainLainKode->id);
+                $lainLainIds[] = $lainLainKode->id;
+                
+                // PERBAIKAN: Gunakan field tahun yang benar
+                $lainLainData[] = (int) Penerimaan::whereIn('kode_rekening_id', $lainLainIds)
+                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->whereMonth('tanggal', $i)
+                    ->filterBySkpd()
+                    ->sum('jumlah');
+            } else {
                 $lainLainData[] = 0;
             }
         }

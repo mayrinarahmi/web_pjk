@@ -4,1025 +4,1462 @@ namespace App\Services;
 
 use App\Models\KodeRekening;
 use App\Models\Penerimaan;
-use App\Models\TahunAnggaran;
-use App\Models\TargetAnggaran;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class TrendAnalysisService
 {
+    protected $cacheTime = 3600; // 1 hour cache
+
     /**
-     * Get multi-year trend data for specified parameters
+     * Get all Level 6 descendant IDs for aggregation
+     * Used for Level 3, 4, 5 to show aggregated data
      */
-    public function getMultiYearTrend($startYear, $endYear, $level = null, $parentKode = null)
+    private function getDescendantLevel6Ids($parentId, $currentLevel)
     {
-        $results = [];
-        
         try {
-            // Get kode rekening based on level and parent
-            $kodeRekenings = $this->getKodeRekeningByFilter($level, $parentKode);
-            
-            Log::info('Found kode rekening count: ' . $kodeRekenings->count());
-            
-            foreach ($kodeRekenings as $kode) {
-                $yearlyData = [];
-                
-                for ($year = $startYear; $year <= $endYear; $year++) {
-                    $data = $this->getYearlyData($kode, $year);
-                    $yearlyData[] = $data;
-                }
-                
-                // Calculate growth rates
-                $yearlyData = $this->calculateGrowthRates($yearlyData);
-                
-                $results[] = [
-                    'kode_rekening' => $kode,
-                    'yearly_data' => $yearlyData
-                ];
+            // Jika sudah Level 6, return kosong (tidak perlu agregasi)
+            if ($currentLevel >= 6) {
+                return [];
             }
             
-            return $results;
+            // Jika Level 5, langsung ambil Level 6 children
+            if ($currentLevel == 5) {
+                return KodeRekening::where('parent_id', $parentId)
+                    ->where('level', 6)
+                    ->where('is_active', true)
+                    ->pluck('id')
+                    ->toArray();
+            }
+            
+            // Untuk Level 3 & 4, perlu recursive
+            $allIds = [];
+            $nextLevel = $currentLevel + 1;
+            
+            // Ambil children level berikutnya
+            $children = KodeRekening::where('parent_id', $parentId)
+                ->where('level', $nextLevel)
+                ->where('is_active', true)
+                ->get();
+            
+            foreach ($children as $child) {
+                if ($child->level == 6) {
+                    // Jika child sudah Level 6, tambahkan
+                    $allIds[] = $child->id;
+                } else {
+                    // Recursive untuk level lebih dalam
+                    $childIds = $this->getDescendantLevel6Ids($child->id, $child->level);
+                    $allIds = array_merge($allIds, $childIds);
+                }
+            }
+            
+            return array_unique($allIds); // Remove duplicates
+            
         } catch (\Exception $e) {
-            Log::error('Error in getMultiYearTrend: ' . $e->getMessage());
+            Log::error('Error getting descendant IDs: ' . $e->getMessage());
             return [];
         }
     }
-    
+
     /**
-     * Get summary statistics for trend analysis
+     * Get overview data for trend analysis
      */
-    public function getSummaryStatistics($startYear, $endYear, $level = null, $parentKode = null)
+    public function getOverviewData($years = 3, $view = 'yearly', $month = null)
     {
-        try {
-            Log::info('Getting summary statistics', compact('startYear', 'endYear', 'level', 'parentKode'));
+        $cacheKey = "trend_overview_{$years}_{$view}_{$month}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($years, $view, $month) {
+            $currentYear = date('Y');
+            $startYear = $currentYear - $years + 1;
             
-            $data = $this->getMultiYearTrend($startYear, $endYear, $level, $parentKode);
-            
-            // Calculate overall growth
-            $totalStart = 0;
-            $totalEnd = 0;
-            
-            foreach ($data as $item) {
-                foreach ($item['yearly_data'] as $yearData) {
-                    if ($yearData['tahun'] == $startYear) {
-                        $totalStart += $yearData['realisasi'];
+            try {
+                if ($view === 'monthly' && $month !== null) {
+                    // Use Query Builder instead of raw SQL
+                    $data = DB::table('v_penerimaan_monthly')
+                        ->select('tahun', DB::raw('SUM(jumlah) as total'))
+                        ->where('bulan', $month)
+                        ->whereBetween('tahun', [$startYear, $currentYear])
+                        ->groupBy('tahun')
+                        ->orderBy('tahun')
+                        ->get();
+                    
+                    $categories = [];
+                    $seriesData = [];
+                    
+                    foreach ($data as $row) {
+                        $categories[] = (string)$row->tahun;
+                        $seriesData[] = (float)$row->total;
                     }
-                    if ($yearData['tahun'] == $endYear) {
-                        $totalEnd += $yearData['realisasi'];
+                    
+                    return [
+                        'categories' => $categories,
+                        'series' => [
+                            [
+                                'name' => 'PENDAPATAN DAERAH',
+                                'data' => $seriesData
+                            ]
+                        ]
+                    ];
+                    
+                } elseif ($view === 'monthly') {
+                    // Monthly view untuk satu tahun
+                    $data = DB::table('v_penerimaan_monthly')
+                        ->select('bulan', DB::raw('SUM(jumlah) as total'))
+                        ->where('tahun', $currentYear)
+                        ->groupBy('bulan')
+                        ->orderBy('bulan')
+                        ->get();
+                    
+                    $categories = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+                    $seriesData = array_fill(0, 12, 0);
+                    
+                    foreach ($data as $row) {
+                        $seriesData[$row->bulan - 1] = (float)$row->total;
                     }
-                }
-            }
-            
-            $overallGrowth = $totalStart > 0 ? (($totalEnd - $totalStart) / $totalStart) * 100 : 0;
-            
-            // Find top performers
-            $topPerformers = $this->getTopPerformers($data, 3);
-            
-            // Find declining categories
-            $decliningCategories = $this->getDecliningCategories($data);
-            
-            // Calculate average achievement
-            $avgAchievement = $this->getAverageAchievement($data, $endYear);
-            
-            return [
-                'total_growth' => round($overallGrowth, 2),
-                'top_performers' => $topPerformers,
-                'declining_categories' => $decliningCategories,
-                'average_achievement' => round($avgAchievement, 2),
-                'total_current_year' => $totalEnd,
-                'total_start_year' => $totalStart
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error in getSummaryStatistics: ' . $e->getMessage());
-            return [
-                'total_growth' => 0,
-                'top_performers' => [],
-                'declining_categories' => [],
-                'average_achievement' => 0,
-                'total_current_year' => 0,
-                'total_start_year' => 0
-            ];
-        }
-    }
-    
-    /**
-     * Get data for trend chart
-     */
-    /**
- * Get data for trend chart
- * Updated to use direct query instead of getMultiYearTrend
- */
-public function getChartData($startYear, $endYear, $level = null, $parentKode = null)
-{
-    try {
-        // Default level jika tidak ada filter
-        if ($level === null) {
-            $level = 1;
-        }
-
-        // Query untuk mendapatkan data per tahun
-        $query = DB::table('kode_rekening as kr')
-            ->select(
-                'kr.id',
-                'kr.kode',
-                'kr.nama',
-                'p.tahun',
-                DB::raw('COALESCE(SUM(p.jumlah), 0) as total')
-            )
-            ->leftJoin('penerimaan as p', function($join) use ($startYear, $endYear) {
-                $join->on('kr.id', '=', 'p.kode_rekening_id')
-                     ->whereBetween('p.tahun', [$startYear, $endYear]);
-            })
-            ->where('kr.is_active', true)
-            ->where('kr.level', $level)
-            ->groupBy('kr.id', 'kr.kode', 'kr.nama', 'p.tahun');
-
-        // Apply parent filter jika ada
-        if ($parentKode !== null) {
-            if (is_numeric($parentKode)) {
-                $query->where('kr.parent_id', $parentKode);
-            } else {
-                $query->where('kr.kode', 'like', $parentKode . '%');
-            }
-        }
-
-        $data = $query->orderBy('kr.kode')
-                     ->orderBy('p.tahun')
-                     ->get();
-
-        // Process data untuk chart
-        $categories = [];
-        $series = [];
-        
-        // Build year categories
-        for ($year = $startYear; $year <= $endYear; $year++) {
-            $categories[] = (string)$year;
-        }
-        
-        // Group data by kode rekening
-        $groupedData = $data->groupBy('id');
-        
-        // Build series data
-        foreach ($groupedData as $kodeRekeningId => $yearlyData) {
-            // Get nama from first record
-            $firstRecord = $yearlyData->first();
-            $nama = $firstRecord->nama;
-            
-            // Build data array for all years
-            $seriesData = [];
-            for ($year = $startYear; $year <= $endYear; $year++) {
-                $yearRecord = $yearlyData->firstWhere('tahun', $year);
-                $seriesData[] = $yearRecord ? (int)$yearRecord->total : 0;
-            }
-            
-            // Only add to series if has data
-            if (array_sum($seriesData) > 0) {
-                $series[] = [
-                    'name' => $nama,
-                    'data' => $seriesData
-                ];
-            }
-        }
-        
-        return [
-            'categories' => $categories,
-            'series' => $series
-        ];
-    } catch (\Exception $e) {
-        Log::error('Error in getChartData: ' . $e->getMessage());
-        return [
-            'categories' => [],
-            'series' => []
-        ];
-    }
-}
-    
-    /**
-     * Get growth rate chart data
-     */
-    public function getGrowthChartData($startYear, $endYear, $level = null, $parentKode = null)
-    {
-        try {
-            $data = $this->getMultiYearTrend($startYear, $endYear, $level, $parentKode);
-            
-            $categories = [];
-            $series = [];
-            
-            // Build categories from kode rekening names
-            foreach ($data as $item) {
-                $categories[] = $item['kode_rekening']->nama;
-            }
-            
-            // Build series for each year's growth
-            for ($year = $startYear + 1; $year <= $endYear; $year++) {
-                $growthData = [];
-                
-                foreach ($data as $item) {
-                    $value = 0;
-                    foreach ($item['yearly_data'] as $yearData) {
-                        if ($yearData['tahun'] == $year && isset($yearData['growth_rate'])) {
-                            $value = round($yearData['growth_rate'], 2);
-                            break;
+                    
+                    return [
+                        'categories' => $categories,
+                        'series' => [
+                            [
+                                'name' => 'PENDAPATAN DAERAH',
+                                'data' => $seriesData
+                            ]
+                        ]
+                    ];
+                    
+                } else {
+                    // Yearly view
+                    $data = DB::table('v_penerimaan_monthly')
+                        ->select('tahun', DB::raw('SUM(jumlah) as total'))
+                        ->whereBetween('tahun', [$startYear, $currentYear])
+                        ->groupBy('tahun')
+                        ->orderBy('tahun')
+                        ->get();
+                    
+                    $categories = [];
+                    $seriesData = [];
+                    
+                    for ($year = $startYear; $year <= $currentYear; $year++) {
+                        $categories[] = (string)$year;
+                        $found = false;
+                        foreach ($data as $row) {
+                            if ($row->tahun == $year) {
+                                $seriesData[] = (float)$row->total;
+                                $found = true;
+                                break;
+                            }
+                        }
+                        if (!$found) {
+                            $seriesData[] = 0;
                         }
                     }
-                    $growthData[] = $value;
+                    
+                    return [
+                        'categories' => $categories,
+                        'series' => [
+                            [
+                                'name' => 'PENDAPATAN DAERAH',
+                                'data' => $seriesData
+                            ]
+                        ]
+                    ];
                 }
-                
-                $series[] = [
-                    'name' => "Growth " . ($year - 1) . "-" . $year,
-                    'data' => $growthData
-                ];
+            } catch (\Exception $e) {
+                Log::error('Error in getOverviewData: ' . $e->getMessage());
+                throw $e;
+            }
+        });
+    }
+
+    /**
+     * Get monthly chart data with proper filtering for level 3, 4, 5, 6
+     * UPDATED: Added aggregation for Level 3, 4, 5
+     */
+     public function getMonthlyChartData($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null)
+    {
+        $cacheKey = "monthly_chart_{$level}_{$parentKode}_{$tahun}_{$limit}_{$specificId}_{$month}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $tahun, $limit, $specificId, $month) {
+            
+            // Initialize parent variable
+            $parent = null;
+            if ($parentKode && is_numeric($parentKode)) {
+                $parent = KodeRekening::find($parentKode);
             }
             
-            return [
-                'categories' => $categories,
-                'series' => $series
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error in getGrowthChartData: ' . $e->getMessage());
-            return [
-                'categories' => [],
-                'series' => []
-            ];
-        }
-    }
-    
-    /**
-     * Get detailed table data
-     */
-    public function getTableData($startYear, $endYear, $level = null, $parentKode = null)
-    {
-        try {
-            $data = $this->getMultiYearTrend($startYear, $endYear, $level, $parentKode);
-            
-            $tableData = [];
-            
-            foreach ($data as $item) {
-                $row = [
-                    'kode' => $item['kode_rekening']->kode,
-                    'nama' => $item['kode_rekening']->nama,
+            // SPECIAL HANDLING: If month filter is applied, show year-over-year comparison
+            if ($month !== null) {
+                // Determine years range for comparison
+                $currentYear = date('Y');
+                $startYear = $currentYear - 2; // 3 years comparison by default
+                
+                // Build categories (years)
+                $categories = [];
+                for ($year = $startYear; $year <= $currentYear; $year++) {
+                    $categories[] = (string)$year;
+                }
+                
+                // Build query for specific month across multiple years
+                $query = DB::table('v_penerimaan_monthly as vm')
+                    ->select(
+                        'vm.tahun',
+                        DB::raw('SUM(vm.jumlah) as total')
+                    )
+                    ->where('vm.bulan', $month)
+                    ->whereBetween('vm.tahun', [$startYear, $currentYear])
+                    ->whereNotNull('vm.jumlah')
+                    ->where('vm.jumlah', '>', 0);
+                
+                // Apply filtering based on level and parent
+                if ($specificId !== null) {
+                    // Level 6 selected directly
+                    $query->where('vm.kode_rekening_id', $specificId);
+                    
+                } elseif ($parent && in_array($parent->level, [3, 4, 5])) {
+                    // Level 3, 4, 5: Aggregate all Level 6 descendants
+                    $descendantIds = $this->getDescendantLevel6Ids($parentKode, $parent->level);
+                    
+                    if (!empty($descendantIds)) {
+                        $query->whereIn('vm.kode_rekening_id', $descendantIds)
+                              ->where('vm.level', 6);
+                    } else {
+                        return [
+                            'categories' => [],
+                            'series' => []
+                        ];
+                    }
+                } elseif ($parent) {
+                    // Level 1, 2: Show direct children
+                    $query->where('vm.parent_id', $parentKode)
+                          ->where('vm.level', $level);
+                } else {
+                    // No parent - top level
+                    $query->where('vm.level', $level);
+                }
+                
+                // Group by year and get results
+                $query->groupBy('vm.tahun');
+                $results = $query->orderBy('vm.tahun')->get();
+                
+                // Prepare data array
+                $dataMap = [];
+                foreach ($results as $row) {
+                    $dataMap[$row->tahun] = (float)$row->total;
+                }
+                
+                // Build series data ensuring all years have values
+                $seriesData = [];
+                for ($year = $startYear; $year <= $currentYear; $year++) {
+                    $seriesData[] = $dataMap[$year] ?? 0;
+                }
+                
+                // Determine series name
+                $monthName = $this->getMonthName($month);
+                if ($parent) {
+                    $seriesName = $parent->nama . ' - ' . $monthName;
+                } elseif ($specificId) {
+                    $item = KodeRekening::find($specificId);
+                    $seriesName = ($item ? $item->nama : 'Item') . ' - ' . $monthName;
+                } else {
+                    $seriesName = $monthName;
+                }
+                
+                Log::info('Month comparison data', [
+                    'month' => $month,
+                    'categories' => $categories,
+                    'data' => $seriesData
+                ]);
+                
+                return [
+                    'categories' => $categories,
+                    'series' => [
+                        [
+                            'name' => $seriesName,
+                            'data' => $seriesData
+                        ]
+                    ]
                 ];
                 
-                // Add yearly data
-                foreach ($item['yearly_data'] as $yearData) {
-                    $row['tahun_' . $yearData['tahun']] = [
-                        'realisasi' => $yearData['realisasi'],
-                        'target' => $yearData['target'],
-                        'persentase' => $yearData['persentase_capaian'],
-                        'growth' => isset($yearData['growth_rate']) ? $yearData['growth_rate'] : 0
+            } else {
+                // EXISTING LOGIC: Show all months for current year
+                // Base query dari view
+                $baseQuery = DB::table('v_penerimaan_monthly as vm')
+                    ->select(
+                        'vm.kode_rekening_id',
+                        'vm.nama_rekening',
+                        'vm.bulan',
+                        'vm.level',
+                        'vm.parent_id',
+                        DB::raw('SUM(vm.jumlah) as total')
+                    )
+                    ->where('vm.tahun', $tahun)
+                    ->whereNotNull('vm.jumlah')
+                    ->where('vm.jumlah', '>', 0);
+                
+                // Apply filtering based on level and parent
+                if ($specificId !== null) {
+                    // Level 6 selected directly
+                    $baseQuery->where('vm.kode_rekening_id', $specificId);
+                    Log::info('Filtering by specific ID', ['specificId' => $specificId]);
+                    
+                } elseif ($parent && in_array($parent->level, [3, 4, 5])) {
+                    // Level 3, 4, 5: Aggregate all Level 6 descendants
+                    Log::info('Aggregating for Level ' . $parent->level, ['parent_id' => $parentKode]);
+                    
+                    $descendantIds = $this->getDescendantLevel6Ids($parentKode, $parent->level);
+                    
+                    if (!empty($descendantIds)) {
+                        $baseQuery->whereIn('vm.kode_rekening_id', $descendantIds)
+                                  ->where('vm.level', 6);
+                        
+                        Log::info('Found descendants', [
+                            'parent_level' => $parent->level,
+                            'descendant_count' => count($descendantIds),
+                            'sample_ids' => array_slice($descendantIds, 0, 5)
+                        ]);
+                    } else {
+                        Log::warning('No descendants found for Level ' . $parent->level, ['parent_id' => $parentKode]);
+                        return [
+                            'categories' => [],
+                            'series' => []
+                        ];
+                    }
+                } elseif ($parent && $parent->level < 3) {
+                    // Level 1, 2: Show direct children
+                    $baseQuery->where('vm.parent_id', $parentKode)
+                              ->where('vm.level', $level);
+                } else {
+                    // No parent specified - get top level items
+                    $baseQuery->where('vm.level', $level);
+                }
+                
+                // GROUP BY all non-aggregate columns
+                $baseQuery->groupBy(
+                    'vm.kode_rekening_id',
+                    'vm.nama_rekening',
+                    'vm.bulan',
+                    'vm.level',
+                    'vm.parent_id'
+                )->orderBy('total', 'desc');
+                
+                $results = $baseQuery->get();
+                
+                Log::info('Query results', [
+                    'count' => $results->count(),
+                    'parentKode' => $parentKode
+                ]);
+                
+                if ($results->isEmpty()) {
+                    return [
+                        'categories' => [],
+                        'series' => []
                     ];
                 }
                 
-                // Calculate average growth
-                $growthCount = 0;
-                $growthSum = 0;
-                foreach ($item['yearly_data'] as $yearData) {
-                    if (isset($yearData['growth_rate']) && $yearData['growth_rate'] !== null) {
-                        $growthSum += $yearData['growth_rate'];
-                        $growthCount++;
+                // Process all months data
+                $itemsMap = [];
+                $months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+                
+                foreach ($results as $row) {
+                    $itemId = $row->kode_rekening_id;
+                    
+                    if (!isset($itemsMap[$itemId])) {
+                        $itemsMap[$itemId] = [
+                            'nama' => $this->truncateName($row->nama_rekening),
+                            'data' => array_fill(0, 12, 0),
+                            'total' => 0
+                        ];
+                    }
+                    
+                    $monthIndex = $row->bulan - 1;
+                    $itemsMap[$itemId]['data'][$monthIndex] = (float)$row->total;
+                    $itemsMap[$itemId]['total'] += (float)$row->total;
+                }
+                
+                // Sort by total
+                uasort($itemsMap, function($a, $b) {
+                    return $b['total'] <=> $a['total'];
+                });
+                
+                // Limit results
+                $itemsMap = array_slice($itemsMap, 0, $limit, true);
+                
+                // Prepare series data
+                $series = [];
+                
+                // For Level 3, 4, 5 aggregation - show as single series
+                if ($parent && in_array($parent->level, [3, 4, 5])) {
+                    // Aggregate all items into one series
+                    $aggregatedData = array_fill(0, 12, 0);
+                    foreach ($itemsMap as $item) {
+                        for ($i = 0; $i < 12; $i++) {
+                            $aggregatedData[$i] += $item['data'][$i];
+                        }
+                    }
+                    
+                    $series[] = [
+                        'name' => $parent->nama . ' (Total)',
+                        'data' => $aggregatedData
+                    ];
+                } else {
+                    // Normal behavior for other levels
+                    foreach ($itemsMap as $item) {
+                        $series[] = [
+                            'name' => $item['nama'],
+                            'data' => $item['data']
+                        ];
                     }
                 }
                 
-                $row['avg_growth'] = $growthCount > 0 ? round($growthSum / $growthCount, 2) : 0;
+                return [
+                    'categories' => $months,
+                    'series' => $series
+                ];
+            }
+        });
+    }
+
+    /**
+     * Get yearly chart data
+     * UPDATED: Added aggregation for Level 3, 4, 5
+     */
+    public function getYearlyChartData($level, $parentKode, $years = 3, $limit = 10, $specificId = null)
+    {
+        $cacheKey = "yearly_chart_{$level}_{$parentKode}_{$years}_{$limit}_{$specificId}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $years, $limit, $specificId) {
+            $currentYear = date('Y');
+            $startYear = $currentYear - $years + 1;
+            
+            // Query yang sudah dioptimasi menggunakan view
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.kode_rekening_id',
+                    'vm.nama_rekening',
+                    'vm.tahun',
+                    'vm.level',
+                    'vm.parent_id',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->whereBetween('vm.tahun', [$startYear, $currentYear])
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            // UPDATED: Special handling for Level 3, 4, 5 aggregation
+            if ($parentKode !== null && is_numeric($parentKode)) {
+                $parent = KodeRekening::find($parentKode);
                 
-                $tableData[] = $row;
+                if ($parent && in_array($parent->level, [3, 4, 5])) {
+                    // Level 3, 4, 5: Aggregate all Level 6 descendants
+                    Log::info('Yearly aggregation for Level ' . $parent->level, ['parent_id' => $parentKode]);
+                    
+                    $descendantIds = $this->getDescendantLevel6Ids($parentKode, $parent->level);
+                    
+                    if (!empty($descendantIds)) {
+                        $query->whereIn('vm.kode_rekening_id', $descendantIds)
+                              ->where('vm.level', 6);
+                    } else {
+                        return [
+                            'categories' => [],
+                            'series' => []
+                        ];
+                    }
+                } elseif ($parent && $parent->level < 3) {
+                    // Level 1, 2: Show direct children
+                    $query->where('vm.parent_id', $parentKode)
+                          ->where('vm.level', $level);
+                } elseif ($specificId !== null) {
+                    // Level 6 selected directly
+                    $query->where('vm.kode_rekening_id', $specificId);
+                } else {
+                    // Default case
+                    $query->where('vm.parent_id', $parentKode)
+                          ->where('vm.level', $level);
+                }
+            } elseif ($specificId !== null) {
+                // Level 6 selected directly
+                $query->where('vm.kode_rekening_id', $specificId);
+            } else {
+                // Top level
+                $query->where('vm.level', $level);
             }
             
-            return $tableData;
-        } catch (\Exception $e) {
-            Log::error('Error in getTableData: ' . $e->getMessage());
-            return [];
-        }
+            $query->groupBy('vm.kode_rekening_id', 'vm.nama_rekening', 'vm.tahun', 'vm.level', 'vm.parent_id');
+            
+            $results = $query->get();
+            
+            if ($results->isEmpty()) {
+                return [
+                    'categories' => [],
+                    'series' => []
+                ];
+            }
+            
+            // Prepare chart data
+            $categories = [];
+            for ($year = $startYear; $year <= $currentYear; $year++) {
+                $categories[] = (string)$year;
+            }
+            
+            // For Level 3, 4, 5 - aggregate into single series
+            if ($parentKode && isset($parent) && in_array($parent->level, [3, 4, 5])) {
+                $yearlyTotals = [];
+                
+                foreach ($results as $row) {
+                    if (!isset($yearlyTotals[$row->tahun])) {
+                        $yearlyTotals[$row->tahun] = 0;
+                    }
+                    $yearlyTotals[$row->tahun] += (float)$row->total;
+                }
+                
+                $data = [];
+                for ($year = $startYear; $year <= $currentYear; $year++) {
+                    $data[] = $yearlyTotals[$year] ?? 0;
+                }
+                
+                return [
+                    'categories' => $categories,
+                    'series' => [
+                        [
+                            'name' => $parent->nama . ' (Total)',
+                            'data' => $data
+                        ]
+                    ]
+                ];
+            } else {
+                // Normal behavior for other levels
+                $kategoris = [];
+                foreach ($results as $row) {
+                    $kategoriId = $row->kode_rekening_id;
+                    
+                    if (!isset($kategoris[$kategoriId])) {
+                        $kategoris[$kategoriId] = [
+                            'nama' => $this->truncateName($row->nama_rekening),
+                            'data' => [],
+                            'total' => 0
+                        ];
+                    }
+                    
+                    $kategoris[$kategoriId]['data'][$row->tahun] = (float)$row->total;
+                    $kategoris[$kategoriId]['total'] += (float)$row->total;
+                }
+                
+                // Sort by total
+                uasort($kategoris, function($a, $b) {
+                    return $b['total'] <=> $a['total'];
+                });
+                
+                // Limit
+                $kategoris = array_slice($kategoris, 0, $limit, true);
+                
+                $series = [];
+                foreach ($kategoris as $kategori) {
+                    $data = [];
+                    for ($year = $startYear; $year <= $currentYear; $year++) {
+                        $data[] = $kategori['data'][$year] ?? 0;
+                    }
+                    
+                    $series[] = [
+                        'name' => $kategori['nama'],
+                        'data' => $data
+                    ];
+                }
+                
+                return [
+                    'categories' => $categories,
+                    'series' => $series
+                ];
+            }
+        });
     }
-    
+
     /**
-     * Private helper methods
+     * Alias method for backward compatibility
      */
-    private function getKodeRekeningByFilter($level = null, $parentKode = null)
+    public function getMonthlyChartDataOptimized($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null)
+    {
+        return $this->getMonthlyChartData($level, $parentKode, $tahun, $limit, $specificId, $month);
+    }
+
+    /**
+     * Yearly optimized version - alias method
+     */
+    public function getYearlyChartDataOptimized($level, $parentKode, $years = 3, $limit = 10, $specificId = null)
+    {
+        return $this->getYearlyChartData($level, $parentKode, $years, $limit, $specificId);
+    }
+
+    /**
+     * Get comparison data between periods
+     */
+    public function getComparisonData($level, $parentKode, $period1Start, $period1End, $period2Start, $period2End)
+    {
+        $cacheKey = "comparison_{$level}_{$parentKode}_{$period1Start}_{$period1End}_{$period2Start}_{$period2End}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $period1Start, $period1End, $period2Start, $period2End) {
+            // Get data for period 1
+            $period1Data = $this->getPeriodData($level, $parentKode, $period1Start, $period1End);
+            
+            // Get data for period 2
+            $period2Data = $this->getPeriodData($level, $parentKode, $period2Start, $period2End);
+            
+            // Calculate comparison
+            $comparison = [];
+            foreach ($period1Data as $item) {
+                $kodeRekeningId = $item->kode_rekening_id;
+                $period2Item = $period2Data->firstWhere('kode_rekening_id', $kodeRekeningId);
+                
+                $period1Total = (float)$item->total;
+                $period2Total = $period2Item ? (float)$period2Item->total : 0;
+                
+                $difference = $period2Total - $period1Total;
+                $percentageChange = 0;
+                
+                if ($period1Total > 0) {
+                    $percentageChange = ($difference / $period1Total) * 100;
+                }
+                
+                $comparison[] = [
+                    'kode_rekening_id' => $kodeRekeningId,
+                    'nama' => $item->nama_rekening,
+                    'period1_total' => $period1Total,
+                    'period2_total' => $period2Total,
+                    'difference' => $difference,
+                    'percentage_change' => round($percentageChange, 2)
+                ];
+            }
+            
+            // Sort by absolute difference
+            usort($comparison, function($a, $b) {
+                return abs($b['difference']) <=> abs($a['difference']);
+            });
+            
+            return $comparison;
+        });
+    }
+
+    /**
+     * Get period data helper
+     */
+    private function getPeriodData($level, $parentKode, $startDate, $endDate)
+    {
+        $query = DB::table('v_penerimaan_monthly as vm')
+            ->select(
+                'vm.kode_rekening_id',
+                'vm.nama_rekening',
+                DB::raw('SUM(vm.jumlah) as total')
+            )
+            ->whereBetween('vm.tanggal', [$startDate, $endDate])
+            ->whereNotNull('vm.jumlah')
+            ->where('vm.jumlah', '>', 0);
+        
+        if ($parentKode !== null) {
+            if (is_numeric($parentKode)) {
+                $query->where('vm.parent_id', $parentKode)
+                      ->where('vm.level', $level);
+            } else {
+                $kodeRekeningIds = KodeRekening::where('kode', 'LIKE', $parentKode . '%')
+                    ->where('level', $level)
+                    ->pluck('id')
+                    ->toArray();
+                
+                if (!empty($kodeRekeningIds)) {
+                    $query->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
+                }
+            }
+        } else {
+            $query->where('vm.level', $level);
+        }
+        
+        return $query->groupBy('vm.kode_rekening_id', 'vm.nama_rekening')
+                     ->orderBy('total', 'desc')
+                     ->get();
+    }
+
+    /**
+     * Get top performers
+     */
+    public function getTopPerformers($tahun, $limit = 10, $level = null)
+    {
+        $cacheKey = "top_performers_{$tahun}_{$limit}_{$level}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($tahun, $limit, $level) {
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.kode_rekening_id',
+                    'vm.nama_rekening',
+                    'vm.level',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($level !== null) {
+                $query->where('vm.level', $level);
+            }
+            
+            return $query->groupBy('vm.kode_rekening_id', 'vm.nama_rekening', 'vm.level')
+                         ->orderBy('total', 'desc')
+                         ->limit($limit)
+                         ->get();
+        });
+    }
+
+    /**
+     * Get bottom performers
+     */
+    public function getBottomPerformers($tahun, $limit = 10, $level = null)
+    {
+        $cacheKey = "bottom_performers_{$tahun}_{$limit}_{$level}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($tahun, $limit, $level) {
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.kode_rekening_id',
+                    'vm.nama_rekening',
+                    'vm.level',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($level !== null) {
+                $query->where('vm.level', $level);
+            }
+            
+            return $query->groupBy('vm.kode_rekening_id', 'vm.nama_rekening', 'vm.level')
+                         ->orderBy('total', 'asc')
+                         ->limit($limit)
+                         ->get();
+        });
+    }
+
+    /**
+     * Get growth analysis
+     */
+    public function getGrowthAnalysis($level, $parentKode, $startYear, $endYear)
+    {
+        $cacheKey = "growth_analysis_{$level}_{$parentKode}_{$startYear}_{$endYear}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $startYear, $endYear) {
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.kode_rekening_id',
+                    'vm.nama_rekening',
+                    'vm.tahun',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->whereBetween('vm.tahun', [$startYear, $endYear])
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($parentKode !== null) {
+                if (is_numeric($parentKode)) {
+                    $query->where('vm.parent_id', $parentKode)
+                          ->where('vm.level', $level);
+                } else {
+                    $kodeRekeningIds = KodeRekening::where('kode', 'LIKE', $parentKode . '%')
+                        ->where('level', $level)
+                        ->pluck('id')
+                        ->toArray();
+                    
+                    if (!empty($kodeRekeningIds)) {
+                        $query->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
+                    }
+                }
+            } else {
+                $query->where('vm.level', $level);
+            }
+            
+            $results = $query->groupBy('vm.kode_rekening_id', 'vm.nama_rekening', 'vm.tahun')
+                             ->orderBy('vm.kode_rekening_id')
+                             ->orderBy('vm.tahun')
+                             ->get();
+            
+            // Process growth data
+            $growthData = [];
+            $grouped = $results->groupBy('kode_rekening_id');
+            
+            foreach ($grouped as $kodeRekeningId => $yearlyData) {
+                $firstYear = $yearlyData->firstWhere('tahun', $startYear);
+                $lastYear = $yearlyData->firstWhere('tahun', $endYear);
+                
+                if ($firstYear && $lastYear) {
+                    $firstTotal = (float)$firstYear->total;
+                    $lastTotal = (float)$lastYear->total;
+                    
+                    $growth = 0;
+                    if ($firstTotal > 0) {
+                        $growth = (($lastTotal - $firstTotal) / $firstTotal) * 100;
+                    }
+                    
+                    $growthData[] = [
+                        'kode_rekening_id' => $kodeRekeningId,
+                        'nama' => $firstYear->nama_rekening,
+                        'first_year_total' => $firstTotal,
+                        'last_year_total' => $lastTotal,
+                        'growth_percentage' => round($growth, 2),
+                        'yearly_data' => $yearlyData->pluck('total', 'tahun')->toArray()
+                    ];
+                }
+            }
+            
+            // Sort by growth percentage
+            usort($growthData, function($a, $b) {
+                return $b['growth_percentage'] <=> $a['growth_percentage'];
+            });
+            
+            return $growthData;
+        });
+    }
+
+    /**
+     * Get seasonal analysis
+     */
+    public function getSeasonalAnalysis($kodeRekeningId, $years = 3)
+    {
+        $cacheKey = "seasonal_analysis_{$kodeRekeningId}_{$years}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($kodeRekeningId, $years) {
+            $currentYear = date('Y');
+            $startYear = $currentYear - $years + 1;
+            
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.bulan',
+                    'vm.tahun',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.kode_rekening_id', $kodeRekeningId)
+                ->whereBetween('vm.tahun', [$startYear, $currentYear])
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0)
+                ->groupBy('vm.bulan', 'vm.tahun')
+                ->orderBy('vm.tahun')
+                ->orderBy('vm.bulan')
+                ->get();
+            
+            // Process seasonal data
+            $monthlyAverages = [];
+            $monthlyData = [];
+            
+            for ($month = 1; $month <= 12; $month++) {
+                $monthData = $query->where('bulan', $month);
+                $monthlyData[$month] = [];
+                
+                foreach ($monthData as $data) {
+                    $monthlyData[$month][$data->tahun] = (float)$data->total;
+                }
+                
+                $average = $monthData->count() > 0 ? $monthData->avg('total') : 0;
+                $monthlyAverages[$month] = round($average, 2);
+            }
+            
+            return [
+                'monthly_averages' => $monthlyAverages,
+                'monthly_data' => $monthlyData,
+                'months' => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des']
+            ];
+        });
+    }
+
+    /**
+     * Search kode rekening
+     */
+    public function searchKodeRekening($query, $limit = 10)
+    {
+        return KodeRekening::where('nama', 'LIKE', "%{$query}%")
+            ->orWhere('kode', 'LIKE', "%{$query}%")
+            ->where('is_active', true)
+            ->select('id', 'kode', 'nama', 'level')
+            ->orderBy('level')
+            ->orderBy('kode')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Get kode rekening hierarchy
+     */
+    public function getKodeRekeningHierarchy($parentId = null, $maxLevel = null)
     {
         $query = KodeRekening::where('is_active', true);
         
-        if ($level) {
-            $query->where('level', $level);
-        }
-        
-        if ($parentKode) {
-            if (is_numeric($parentKode)) {
-                // If numeric, assume it's parent_id
-                $query->where('parent_id', $parentKode);
-            } else {
-                // If string, search by kode pattern
-                $query->where('kode', 'like', $parentKode . '%');
-                if ($level) {
-                    $query->where('level', $level);
-                }
-            }
+        if ($parentId !== null) {
+            $query->where('parent_id', $parentId);
         } else {
-            // Default to level 2 if no filter specified
-            $query->where('level', 2);
+            $query->whereNull('parent_id');
         }
         
-        // Add limit for performance during testing - remove this in production
-        // $query->limit(5);
+        if ($maxLevel !== null) {
+            $query->where('level', '<=', $maxLevel);
+        }
         
-        return $query->orderBy('kode', 'asc')->get();
-    }
-    
-    private function getYearlyData($kodeRekening, $year)
-    {
-        try {
-            // For level 2, we need to aggregate all children
-            if ($kodeRekening->level == 2) {
-                // Get all descendant IDs efficiently
-                $kodeRekeningIds = $this->getAllDescendantIds($kodeRekening->id);
-            } else {
-                // For other levels, just use direct children
-                $kodeRekeningIds = $this->getAllChildIds($kodeRekening->id, 3); // Max depth 3
+        $items = $query->orderBy('kode')->get();
+        
+        $hierarchy = [];
+        foreach ($items as $item) {
+            $children = [];
+            if ($maxLevel === null || $item->level < $maxLevel) {
+                $children = $this->getKodeRekeningHierarchy($item->id, $maxLevel);
             }
             
-            // Always include the parent itself
-            $kodeRekeningIds[] = $kodeRekening->id;
-            
-            // Remove duplicates
-            $kodeRekeningIds = array_unique($kodeRekeningIds);
-            
-            // Get realisasi with optimized query
-            $realisasi = Penerimaan::whereIn('kode_rekening_id', $kodeRekeningIds)
-                ->whereYear('tanggal', $year)
-                ->sum('jumlah');
-            
-            // Get target from active tahun anggaran
-            $tahunAnggaran = TahunAnggaran::where('tahun', $year)
-                ->where('is_active', true)
-                ->orderBy('jenis_anggaran', 'desc') // Prioritize 'perubahan' over 'murni'
-                ->first();
-            
-            $target = 0;
-            if ($tahunAnggaran) {
-                $target = TargetAnggaran::where('tahun_anggaran_id', $tahunAnggaran->id)
-                    ->whereIn('kode_rekening_id', $kodeRekeningIds)
-                    ->sum('jumlah');
-            }
-            
-            // If no target but has realisasi, use realisasi as baseline
-            if ($target == 0 && $realisasi > 0) {
-                $target = $realisasi;
-            }
-            
-            // Calculate achievement percentage
-            $persentase = $target > 0 ? ($realisasi / $target) * 100 : 0;
-            
-            return [
-                'tahun' => $year,
-                'realisasi' => $realisasi,
-                'target' => $target,
-                'persentase_capaian' => round($persentase, 2),
-                'growth_rate' => null // Will be calculated later
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error in getYearlyData: ' . $e->getMessage());
-            return [
-                'tahun' => $year,
-                'realisasi' => 0,
-                'target' => 0,
-                'persentase_capaian' => 0,
-                'growth_rate' => null
+            $hierarchy[] = [
+                'id' => $item->id,
+                'kode' => $item->kode,
+                'nama' => $item->nama,
+                'level' => $item->level,
+                'children' => $children
             ];
         }
-    }
-    
-    private function calculateGrowthRates($yearlyData)
-    {
-        $previousYear = null;
         
-        for ($i = 0; $i < count($yearlyData); $i++) {
-            if ($previousYear !== null) {
-                $growth = 0;
-                if ($previousYear['realisasi'] > 0) {
-                    $growth = (($yearlyData[$i]['realisasi'] - $previousYear['realisasi']) / $previousYear['realisasi']) * 100;
-                } elseif ($yearlyData[$i]['realisasi'] > 0) {
-                    $growth = 100; // From 0 to positive is 100% growth
-                }
-                
-                $yearlyData[$i]['growth_rate'] = round($growth, 2);
-            }
-            
-            $previousYear = $yearlyData[$i];
-        }
-        
-        return $yearlyData;
+        return $hierarchy;
     }
-    
+
     /**
-     * Get all child IDs with depth limit to prevent infinite recursion
+     * Get summary statistics
      */
-    private function getAllChildIds($parentId, $maxDepth = 5, $currentDepth = 0)
+    public function getSummaryStatistics($tahun, $level = null, $parentKode = null)
     {
-        if ($currentDepth >= $maxDepth) {
-            return [];
-        }
+        $cacheKey = "summary_stats_{$tahun}_{$level}_{$parentKode}";
         
-        $ids = [];
-        $children = KodeRekening::where('parent_id', $parentId)
-            ->where('is_active', true)
-            ->select('id') // Only select ID for performance
-            ->get();
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($tahun, $level, $parentKode) {
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
             
-        foreach ($children as $child) {
-            $ids[] = $child->id;
-            $childIds = $this->getAllChildIds($child->id, $maxDepth, $currentDepth + 1);
-            $ids = array_merge($ids, $childIds);
-        }
-        
-        return $ids;
-    }
-    
-    /**
-     * Get all descendant IDs more efficiently for level 2
-     */
-    private function getAllDescendantIds($parentId)
-    {
-        // Use a more efficient query for getting all descendants
-        $parent = KodeRekening::find($parentId);
-        if (!$parent) {
-            return [];
-        }
-        
-        // Get all descendants based on kode pattern
-        $descendants = KodeRekening::where('kode', 'like', $parent->kode . '.%')
-            ->where('is_active', true)
-            ->pluck('id')
-            ->toArray();
-            
-        return $descendants;
-    }
-    
-    private function getTopPerformers($data, $limit = 3)
-    {
-        $performers = [];
-        
-        foreach ($data as $item) {
-            $growthSum = 0;
-            $growthCount = 0;
-            $latestGrowth = 0;
-            
-            foreach ($item['yearly_data'] as $yearData) {
-                if (isset($yearData['growth_rate']) && $yearData['growth_rate'] !== null) {
-                    $growthSum += $yearData['growth_rate'];
-                    $growthCount++;
-                    $latestGrowth = $yearData['growth_rate']; // Keep updating to get latest
-                }
+            if ($level !== null) {
+                $query->where('vm.level', $level);
             }
             
-            if ($growthCount > 0) {
-                $avgGrowth = $growthSum / $growthCount;
-                
-                $performers[] = [
-                    'nama' => $item['kode_rekening']->nama,
-                    'kode' => $item['kode_rekening']->kode,
-                    'avg_growth' => round($avgGrowth, 2),
-                    'latest_growth' => $latestGrowth
-                ];
-            }
-        }
-        
-        // Sort by average growth descending
-        usort($performers, function($a, $b) {
-            return $b['avg_growth'] <=> $a['avg_growth'];
-        });
-        
-        return array_slice($performers, 0, $limit);
-    }
-    
-    private function getDecliningCategories($data, $threshold = -10)
-    {
-        $declining = [];
-        
-        foreach ($data as $item) {
-            // Get last year data with growth rate
-            $lastGrowth = null;
-            foreach (array_reverse($item['yearly_data']) as $yearData) {
-                if (isset($yearData['growth_rate']) && $yearData['growth_rate'] !== null) {
-                    $lastGrowth = $yearData['growth_rate'];
-                    break;
-                }
-            }
-            
-            if ($lastGrowth !== null && $lastGrowth < $threshold) {
-                $declining[] = [
-                    'nama' => $item['kode_rekening']->nama,
-                    'kode' => $item['kode_rekening']->kode,
-                    'growth_rate' => $lastGrowth
-                ];
-            }
-        }
-        
-        return $declining;
-    }
-    
-    private function getAverageAchievement($data, $year)
-    {
-        $achievementSum = 0;
-        $achievementCount = 0;
-        
-        foreach ($data as $item) {
-            foreach ($item['yearly_data'] as $yearData) {
-                if ($yearData['tahun'] == $year && $yearData['target'] > 0) {
-                    $achievementSum += $yearData['persentase_capaian'];
-                    $achievementCount++;
-                }
-            }
-        }
-        
-        return $achievementCount > 0 ? $achievementSum / $achievementCount : 0;
-    }
-    
-    /**
-     * Export data to Excel
-     */
-    public function exportToExcel($startYear, $endYear, $level = null, $parentKode = null)
-    {
-        $data = $this->getTableData($startYear, $endYear, $level, $parentKode);
-        
-        // Format data for Excel export
-        $exportData = [];
-        $headers = ['Kode', 'Nama'];
-        
-        // Add year headers
-        for ($year = $startYear; $year <= $endYear; $year++) {
-            $headers[] = "Realisasi $year";
-            $headers[] = "Target $year";
-            $headers[] = "Capaian $year (%)";
-            if ($year > $startYear) {
-                $headers[] = "Growth $year (%)";
-            }
-        }
-        $headers[] = 'Avg Growth (%)';
-        
-        // Build rows
-        foreach ($data as $row) {
-            $exportRow = [
-                $row['kode'],
-                $row['nama']
-            ];
-            
-            for ($year = $startYear; $year <= $endYear; $year++) {
-                if (isset($row['tahun_' . $year])) {
-                    $yearData = $row['tahun_' . $year];
-                    $exportRow[] = $yearData['realisasi'];
-                    $exportRow[] = $yearData['target'];
-                    $exportRow[] = $yearData['persentase'];
-                    if ($year > $startYear) {
-                        $exportRow[] = $yearData['growth'];
-                    }
+            if ($parentKode !== null) {
+                if (is_numeric($parentKode)) {
+                    $query->where('vm.parent_id', $parentKode);
                 } else {
-                    $exportRow[] = 0;
-                    $exportRow[] = 0;
-                    $exportRow[] = 0;
-                    if ($year > $startYear) {
-                        $exportRow[] = 0;
+                    $kodeRekeningIds = KodeRekening::where('kode', 'LIKE', $parentKode . '%')
+                        ->where('level', $level)
+                        ->pluck('id')
+                        ->toArray();
+                    
+                    if (!empty($kodeRekeningIds)) {
+                        $query->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
                     }
                 }
             }
             
-            $exportRow[] = $row['avg_growth'];
-            $exportData[] = $exportRow;
-        }
-        
-        return [
-            'headers' => $headers,
-            'data' => $exportData
-        ];
+            $total = $query->sum('vm.jumlah');
+            $count = $query->count();
+            $average = $count > 0 ? $total / $count : 0;
+            
+            // Get monthly breakdown
+            $monthlyData = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.bulan',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($level !== null) {
+                $monthlyData->where('vm.level', $level);
+            }
+            
+            $kodeRekeningIds = [];
+            if ($parentKode !== null) {
+                if (is_numeric($parentKode)) {
+                    $monthlyData->where('vm.parent_id', $parentKode);
+                } else {
+                    $kodeRekeningIds = KodeRekening::where('kode', 'LIKE', $parentKode . '%')
+                        ->where('level', $level)
+                        ->pluck('id')
+                        ->toArray();
+                    
+                    if (!empty($kodeRekeningIds)) {
+                        $monthlyData->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
+                    }
+                }
+            }
+            
+            $monthlyTotals = $monthlyData->groupBy('vm.bulan')
+                                          ->orderBy('vm.bulan')
+                                          ->pluck('total', 'bulan')
+                                          ->toArray();
+            
+            // Calculate growth from previous year
+            $previousYearTotal = DB::table('v_penerimaan_monthly as vm')
+                ->where('vm.tahun', $tahun - 1)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($level !== null) {
+                $previousYearTotal->where('vm.level', $level);
+            }
+            
+            if ($parentKode !== null) {
+                if (is_numeric($parentKode)) {
+                    $previousYearTotal->where('vm.parent_id', $parentKode);
+                } else {
+                    if (!empty($kodeRekeningIds)) {
+                        $previousYearTotal->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
+                    }
+                }
+            }
+            
+            $prevTotal = $previousYearTotal->sum('vm.jumlah');
+            $growth = 0;
+            
+            if ($prevTotal > 0) {
+                $growth = (($total - $prevTotal) / $prevTotal) * 100;
+            }
+            
+            return [
+                'total' => $total,
+                'count' => $count,
+                'average' => round($average, 2),
+                'growth_from_previous_year' => round($growth, 2),
+                'monthly_totals' => $monthlyTotals,
+                'highest_month' => !empty($monthlyTotals) ? array_keys($monthlyTotals, max($monthlyTotals))[0] : null,
+                'lowest_month' => !empty($monthlyTotals) ? array_keys($monthlyTotals, min($monthlyTotals))[0] : null
+            ];
+        });
     }
 
     /**
- * Add these methods to your existing TrendAnalysisService.php
- * These methods leverage the database views you've created
- */
+     * Get forecast data based on historical trends
+     */
+    public function getForecastData($kodeRekeningId, $months = 12)
+    {
+        $cacheKey = "forecast_{$kodeRekeningId}_{$months}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($kodeRekeningId, $months) {
+            // Get historical data for last 3 years
+            $currentYear = date('Y');
+            $startYear = $currentYear - 3;
+            
+            $historicalData = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.tahun',
+                    'vm.bulan',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.kode_rekening_id', $kodeRekeningId)
+                ->whereBetween('vm.tahun', [$startYear, $currentYear])
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0)
+                ->groupBy('vm.tahun', 'vm.bulan')
+                ->orderBy('vm.tahun')
+                ->orderBy('vm.bulan')
+                ->get();
+            
+            // Simple moving average forecast
+            $forecast = [];
+            $monthlyAverages = [];
+            
+            for ($month = 1; $month <= 12; $month++) {
+                $monthData = $historicalData->where('bulan', $month);
+                $average = $monthData->count() > 0 ? $monthData->avg('total') : 0;
+                $monthlyAverages[$month] = $average;
+            }
+            
+            // Generate forecast for next N months
+            $forecastStartMonth = date('n') + 1;
+            $forecastStartYear = date('Y');
+            
+            for ($i = 0; $i < $months; $i++) {
+                $forecastMonth = ($forecastStartMonth + $i - 1) % 12 + 1;
+                $forecastYear = $forecastStartYear + floor(($forecastStartMonth + $i - 1) / 12);
+                
+                // Apply seasonal adjustment
+                $baseValue = $monthlyAverages[$forecastMonth];
+                
+                // Simple growth factor (2% monthly growth)
+                $growthFactor = pow(1.02, $i);
+                
+                $forecast[] = [
+                    'year' => $forecastYear,
+                    'month' => $forecastMonth,
+                    'month_name' => $this->getMonthName($forecastMonth),
+                    'value' => round($baseValue * $growthFactor, 2)
+                ];
+            }
+            
+            return [
+                'historical' => $historicalData,
+                'forecast' => $forecast,
+                'monthly_averages' => $monthlyAverages
+            ];
+        });
+    }
 
-/**
- * Get monthly comparison using database view
- * Much faster than previous implementation
- */
-public function getMonthlyComparisonOptimized($month, $startYear, $endYear, $level = null, $parentKode = null)
-{
-    try {
-        // Build query using the monthly view
+    /**
+     * Get achievement rate against target
+     */
+    public function getAchievementRate($kodeRekeningId, $tahun, $target = null)
+    {
+        $cacheKey = "achievement_{$kodeRekeningId}_{$tahun}_{$target}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($kodeRekeningId, $tahun, $target) {
+            $actualTotal = DB::table('v_penerimaan_monthly as vm')
+                ->where('vm.kode_rekening_id', $kodeRekeningId)
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0)
+                ->sum('vm.jumlah');
+            
+            // Get monthly breakdown
+            $monthlyData = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.bulan',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.kode_rekening_id', $kodeRekeningId)
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0)
+                ->groupBy('vm.bulan')
+                ->orderBy('vm.bulan')
+                ->get();
+            
+            $monthlyAchievement = [];
+            $monthlyTarget = $target ? $target / 12 : 0;
+            
+            foreach ($monthlyData as $data) {
+                $achievement = $monthlyTarget > 0 ? ($data->total / $monthlyTarget) * 100 : 0;
+                $monthlyAchievement[$data->bulan] = [
+                    'actual' => (float)$data->total,
+                    'target' => $monthlyTarget,
+                    'achievement_rate' => round($achievement, 2)
+                ];
+            }
+            
+            $overallAchievement = $target > 0 ? ($actualTotal / $target) * 100 : 0;
+            
+            return [
+                'actual_total' => $actualTotal,
+                'target_total' => $target,
+                'achievement_rate' => round($overallAchievement, 2),
+                'monthly_achievement' => $monthlyAchievement,
+                'status' => $overallAchievement >= 100 ? 'Achieved' : 'Not Achieved'
+            ];
+        });
+    }
+
+    /**
+     * Get detailed breakdown by sub-categories
+     */
+    public function getDetailedBreakdown($parentId, $tahun, $bulan = null)
+    {
+        $cacheKey = "breakdown_{$parentId}_{$tahun}_{$bulan}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($parentId, $tahun, $bulan) {
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->join('kode_rekening as kr', 'vm.kode_rekening_id', '=', 'kr.id')
+                ->select(
+                    'kr.id',
+                    'kr.kode',
+                    'kr.nama',
+                    'kr.level',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('kr.parent_id', $parentId)
+                ->where('vm.tahun', $tahun)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            if ($bulan !== null) {
+                $query->where('vm.bulan', $bulan);
+            }
+            
+            $results = $query->groupBy('kr.id', 'kr.kode', 'kr.nama', 'kr.level')
+                             ->orderBy('total', 'desc')
+                             ->get();
+            
+            $totalSum = $results->sum('total');
+            
+            // Calculate percentage contribution
+            $breakdown = [];
+            foreach ($results as $item) {
+                $percentage = $totalSum > 0 ? ($item->total / $totalSum) * 100 : 0;
+                $breakdown[] = [
+                    'id' => $item->id,
+                    'kode' => $item->kode,
+                    'nama' => $item->nama,
+                    'level' => $item->level,
+                    'total' => (float)$item->total,
+                    'percentage' => round($percentage, 2)
+                ];
+            }
+            
+            return [
+                'items' => $breakdown,
+                'total' => $totalSum,
+                'count' => count($breakdown)
+            ];
+        });
+    }
+
+    /**
+     * Export data to array for Excel/CSV
+     */
+    public function exportData($level, $parentKode, $tahun, $format = 'array')
+    {
         $query = DB::table('v_penerimaan_monthly as vm')
             ->join('kode_rekening as kr', 'vm.kode_rekening_id', '=', 'kr.id')
-            ->where('vm.bulan', $month)
-            ->whereBetween('vm.tahun', [$startYear, $endYear])
-            ->where('kr.is_active', true);
-        
-        // Apply filters
-        if ($level !== null) {
-            $query->where('kr.level', $level);
-        }
-        
-        if ($parentKode !== null) {
-            if (is_numeric($parentKode)) {
-                // Get all descendants of this parent
-                $parent = KodeRekening::find($parentKode);
-                if ($parent) {
-                    $query->where('kr.kode', 'like', $parent->kode . '%');
-                }
-            } else {
-                $query->where('kr.kode', 'like', $parentKode . '%');
-            }
-        } else {
-            // Default to level 2 for overview
-            $query->where('kr.level', 2);
-        }
-        
-        // Get the data
-        $data = $query->select(
-            'vm.tahun',
-            'vm.bulan',
-            'vm.nama_bulan',
-            'kr.id as kode_rekening_id',
-            'kr.kode',
-            'kr.nama',
-            'kr.level',
-            DB::raw('SUM(vm.total_penerimaan) as total_penerimaan'),
-            DB::raw('SUM(vm.jumlah_transaksi) as jumlah_transaksi')
-        )
-        ->groupBy('vm.tahun', 'vm.bulan', 'vm.nama_bulan', 'kr.id', 'kr.kode', 'kr.nama', 'kr.level')
-        ->orderBy('kr.kode')
-        ->orderBy('vm.tahun')
-        ->get();
-        
-        // Group by kode_rekening for easier processing
-        $grouped = $data->groupBy('kode_rekening_id');
-        
-        $results = [];
-        foreach ($grouped as $kodeRekeningId => $monthlyData) {
-            // Get kode rekening info from first item
-            $firstItem = $monthlyData->first();
-            
-            $kodeRekening = (object)[
-                'id' => $kodeRekeningId,
-                'kode' => $firstItem->kode,
-                'nama' => $firstItem->nama,
-                'level' => $firstItem->level
-            ];
-            
-            // Build yearly data array
-            $yearlyData = [];
-            for ($year = $startYear; $year <= $endYear; $year++) {
-                $yearData = $monthlyData->firstWhere('tahun', $year);
-                
-                if ($yearData) {
-                    $yearlyData[] = [
-                        'tahun' => $year,
-                        'bulan' => $month,
-                        'nama_bulan' => $yearData->nama_bulan,
-                        'realisasi' => (float)$yearData->total_penerimaan,
-                        'jumlah_transaksi' => $yearData->jumlah_transaksi,
-                        'growth_rate' => null
-                    ];
-                } else {
-                    // No data for this year
-                    $yearlyData[] = [
-                        'tahun' => $year,
-                        'bulan' => $month,
-                        'nama_bulan' => Carbon::create()->month($month)->format('F'),
-                        'realisasi' => 0,
-                        'jumlah_transaksi' => 0,
-                        'growth_rate' => null
-                    ];
-                }
-            }
-            
-            // Calculate growth rates
-            $yearlyData = $this->calculateMonthlyGrowthRates($yearlyData);
-            
-            $results[] = [
-                'kode_rekening' => $kodeRekening,
-                'monthly_data' => $yearlyData
-            ];
-        }
-        
-        return $results;
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlyComparisonOptimized: ' . $e->getMessage());
-        return [];
-    }
-}
-
-/**
- * Get monthly growth data directly from view
- * Even faster for growth analysis
- */
-public function getMonthlyGrowthDirect($month, $startYear, $endYear, $level = null, $parentKode = null)
-{
-    try {
-        $query = DB::table('v_monthly_growth_rate as vg')
-            ->join('kode_rekening as kr', 'vg.kode_rekening_id', '=', 'kr.id')
-            ->where('vg.bulan', $month)
-            ->whereBetween('vg.current_year', [$startYear, $endYear])
-            ->where('kr.is_active', true);
-        
-        // Apply filters same as above
-        if ($level !== null) {
-            $query->where('kr.level', $level);
-        }
-        
-        if ($parentKode !== null) {
-            if (is_numeric($parentKode)) {
-                $parent = KodeRekening::find($parentKode);
-                if ($parent) {
-                    $query->where('kr.kode', 'like', $parent->kode . '%');
-                }
-            } else {
-                $query->where('kr.kode', 'like', $parentKode . '%');
-            }
-        } else {
-            $query->where('kr.level', 2);
-        }
-        
-        return $query->select(
-            'vg.*',
-            'kr.nama'
-        )
-        ->orderBy('kr.kode')
-        ->orderBy('vg.current_year')
-        ->get();
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlyGrowthDirect: ' . $e->getMessage());
-        return collect();
-    }
-}
-
-/**
- * Get monthly chart data - Optimized version
- */
-public function getMonthlyChartDataOptimized($month, $startYear, $endYear, $level = null, $parentKode = null)
-{
-    try {
-        // Use optimized method
-        $data = $this->getMonthlyComparisonOptimized($month, $startYear, $endYear, $level, $parentKode);
-        
-        if (empty($data)) {
-            return [
-                'categories' => [],
-                'series' => [],
-                'month' => $month,
-                'monthName' => ''
-            ];
-        }
-        
-        $categories = [];
-        $series = [];
-        
-        // Build year categories
-        for ($year = $startYear; $year <= $endYear; $year++) {
-            $categories[] = (string)$year;
-        }
-        
-        // Build series data
-        foreach ($data as $item) {
-            $seriesData = [];
-            
-            foreach ($item['monthly_data'] as $monthData) {
-                $seriesData[] = (int)$monthData['realisasi'];
-            }
-            
-            // Only include series with data
-            if (array_sum($seriesData) > 0) {
-                $series[] = [
-                    'name' => $item['kode_rekening']->nama,
-                    'data' => $seriesData
-                ];
-            }
-        }
-        
-        // Get month name from first result
-        $monthName = '';
-        if (!empty($data) && !empty($data[0]['monthly_data'])) {
-            $monthName = $data[0]['monthly_data'][0]['nama_bulan'];
-        }
-        
-        return [
-            'categories' => $categories,
-            'series' => $series,
-            'month' => $month,
-            'monthName' => $monthName
-        ];
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlyChartDataOptimized: ' . $e->getMessage());
-        return [
-            'categories' => [],
-            'series' => [],
-            'month' => $month,
-            'monthName' => ''
-        ];
-    }
-}
-
-/**
- * Get top performing categories for specific month
- */
-public function getMonthlyTopPerformers($month, $startYear, $endYear, $limit = 5)
-{
-    try {
-        return DB::table('v_monthly_growth_rate as vg')
-            ->join('kode_rekening as kr', 'vg.kode_rekening_id', '=', 'kr.id')
-            ->where('vg.bulan', $month)
-            ->where('vg.current_year', $endYear)
-            ->where('vg.previous_year', $endYear - 1)
-            ->where('kr.is_active', true)
-            ->where('kr.level', 2) // Top level categories
-            ->whereNotNull('vg.growth_rate_pct')
-            ->where('vg.current_amount', '>', 0)
             ->select(
                 'kr.kode',
                 'kr.nama',
-                'vg.current_amount',
-                'vg.previous_amount',
-                'vg.growth_rate_pct'
-            )
-            ->orderBy('vg.growth_rate_pct', 'desc')
-            ->limit($limit)
-            ->get();
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlyTopPerformers: ' . $e->getMessage());
-        return collect();
-    }
-}
-
-/**
- * Get monthly trend for all months in a year
- * Useful for seasonal analysis
- */
-public function getYearlyMonthlyTrend($year, $kodeRekeningId = null)
-{
-    try {
-        $query = DB::table('v_penerimaan_monthly')
-            ->where('tahun', $year);
-        
-        if ($kodeRekeningId) {
-            $query->where('kode_rekening_id', $kodeRekeningId);
-        }
-        
-        return $query->select(
-            'bulan',
-            'nama_bulan',
-            DB::raw('SUM(total_penerimaan) as total'),
-            DB::raw('SUM(jumlah_transaksi) as transaksi')
-        )
-        ->groupBy('bulan', 'nama_bulan')
-        ->orderBy('bulan')
-        ->get();
-    } catch (\Exception $e) {
-        Log::error('Error in getYearlyMonthlyTrend: ' . $e->getMessage());
-        return collect();
-    }
-}
-
-/**
- * Compare same month across multiple years
- * Direct query to monthly view
- */
-public function getMonthComparisonAcrossYears($month, $kodeRekeningIds = [])
-{
-    try {
-        $query = DB::table('v_penerimaan_monthly as vm')
-            ->join('kode_rekening as kr', 'vm.kode_rekening_id', '=', 'kr.id')
-            ->where('vm.bulan', $month)
-            ->where('kr.is_active', true);
-        
-        if (!empty($kodeRekeningIds)) {
-            $query->whereIn('vm.kode_rekening_id', $kodeRekeningIds);
-        }
-        
-        return $query->select(
-            'vm.tahun',
-            'vm.nama_bulan',
-            'kr.kode',
-            'kr.nama',
-            'vm.total_penerimaan',
-            'vm.jumlah_transaksi'
-        )
-        ->orderBy('vm.tahun', 'desc')
-        ->orderBy('kr.kode')
-        ->get();
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthComparisonAcrossYears: ' . $e->getMessage());
-        return collect();
-    }
-}
-
-/**
- * Get monthly summary with best/worst months
- */
-public function getMonthlySummaryAnalysis($year, $level = 2)
-{
-    try {
-        $monthlyTotals = DB::table('v_penerimaan_monthly as vm')
-            ->join('kode_rekening as kr', 'vm.kode_rekening_id', '=', 'kr.id')
-            ->where('vm.tahun', $year)
-            ->where('kr.level', $level)
-            ->where('kr.is_active', true)
-            ->select(
                 'vm.bulan',
-                'vm.nama_bulan',
-                DB::raw('SUM(vm.total_penerimaan) as total')
+                'vm.tahun',
+                'vm.jumlah'
             )
-            ->groupBy('vm.bulan', 'vm.nama_bulan')
-            ->orderBy('total', 'desc')
-            ->get();
+            ->where('vm.tahun', $tahun)
+            ->whereNotNull('vm.jumlah')
+            ->where('vm.jumlah', '>', 0);
         
-        if ($monthlyTotals->isEmpty()) {
-            return null;
-        }
-        
-        return [
-            'best_month' => $monthlyTotals->first(),
-            'worst_month' => $monthlyTotals->last(),
-            'average' => $monthlyTotals->avg('total'),
-            'total' => $monthlyTotals->sum('total'),
-            'all_months' => $monthlyTotals
-        ];
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlySummaryAnalysis: ' . $e->getMessage());
-        return null;
-    }
-}
-private function calculateMonthlyGrowthRates($monthlyData)
-{
-    $previousData = null;
-    
-    for ($i = 0; $i < count($monthlyData); $i++) {
-        if ($previousData !== null) {
-            $growth = 0;
-            if ($previousData['realisasi'] > 0) {
-                $growth = (($monthlyData[$i]['realisasi'] - $previousData['realisasi']) / $previousData['realisasi']) * 100;
-            } elseif ($monthlyData[$i]['realisasi'] > 0) {
-                $growth = 100; // From 0 to positive is 100% growth
+        if ($parentKode !== null) {
+            if (is_numeric($parentKode)) {
+                $query->where('kr.parent_id', $parentKode)
+                      ->where('kr.level', $level);
+            } else {
+                $query->where('kr.kode', 'LIKE', $parentKode . '%')
+                      ->where('kr.level', $level);
             }
-            
-            $monthlyData[$i]['growth_rate'] = round($growth, 2);
+        } else {
+            $query->where('kr.level', $level);
         }
         
-        $previousData = $monthlyData[$i];
-    }
-    
-    return $monthlyData;
-}
-
-/**
- * Get monthly summary statistics
- */
-public function getMonthlySummaryStatistics($month, $startYear, $endYear, $level = null, $parentKode = null)
-{
-    try {
-        // Get monthly comparison data
-        $data = $this->getMonthlyComparisonOptimized($month, $startYear, $endYear, $level, $parentKode);
+        $results = $query->orderBy('kr.kode')
+                         ->orderBy('vm.bulan')
+                         ->get();
         
-        if (empty($data)) {
-            return [
-                'total_growth' => 0,
-                'monthName' => Carbon::create()->month($month)->format('F'),
-                'yearly_totals' => []
+        if ($format === 'array') {
+            return $results->toArray();
+        }
+        
+        // Format for CSV
+        $csvData = [];
+        $csvData[] = ['Kode', 'Nama', 'Bulan', 'Tahun', 'Jumlah'];
+        
+        foreach ($results as $row) {
+            $csvData[] = [
+                $row->kode,
+                $row->nama,
+                $this->getMonthName($row->bulan),
+                $row->tahun,
+                $row->jumlah
             ];
         }
         
-        // Calculate totals for each year
-        $yearlyTotals = [];
-        for ($year = $startYear; $year <= $endYear; $year++) {
-            $yearlyTotals[$year] = 0;
+        return $csvData;
+    }
+
+    /**
+     * Clear cache for specific key pattern
+     */
+    public function clearCache($pattern = null)
+    {
+        if ($pattern) {
+            // Clear specific cache pattern
+            Cache::forget($pattern);
+        } else {
+            // Clear all trend analysis cache
+            Cache::flush();
         }
         
-        foreach ($data as $item) {
-            foreach ($item['monthly_data'] as $monthData) {
-                $yearlyTotals[$monthData['tahun']] += $monthData['realisasi'];
+        return true;
+    }
+
+    /**
+     * Validate data integrity
+     */
+    public function validateDataIntegrity($tahun)
+    {
+        $issues = [];
+        
+        // Check for negative values
+        $negativeValues = DB::table('v_penerimaan_monthly')
+            ->where('tahun', $tahun)
+            ->where('jumlah', '<', 0)
+            ->count();
+        
+        if ($negativeValues > 0) {
+            $issues[] = "Found {$negativeValues} negative values";
+        }
+        
+        // Check for orphaned records
+        $orphanedRecords = DB::table('v_penerimaan_monthly as vm')
+            ->leftJoin('kode_rekening as kr', 'vm.kode_rekening_id', '=', 'kr.id')
+            ->where('vm.tahun', $tahun)
+            ->whereNull('kr.id')
+            ->count();
+        
+        if ($orphanedRecords > 0) {
+            $issues[] = "Found {$orphanedRecords} orphaned records";
+        }
+        
+        // Check for missing months
+        $monthCounts = DB::table('v_penerimaan_monthly')
+            ->select('bulan', DB::raw('COUNT(*) as count'))
+            ->where('tahun', $tahun)
+            ->groupBy('bulan')
+            ->pluck('count', 'bulan')
+            ->toArray();
+        
+        for ($month = 1; $month <= 12; $month++) {
+            if (!isset($monthCounts[$month]) || $monthCounts[$month] == 0) {
+                $issues[] = "No data for month {$month}";
             }
         }
         
-        // Calculate overall growth
-        $firstYearTotal = $yearlyTotals[$startYear] ?? 0;
-        $lastYearTotal = $yearlyTotals[$endYear] ?? 0;
-        
-        $totalGrowth = 0;
-        if ($firstYearTotal > 0) {
-            $totalGrowth = (($lastYearTotal - $firstYearTotal) / $firstYearTotal) * 100;
-        }
-        
         return [
-            'total_growth' => round($totalGrowth, 2),
-            'monthName' => $data[0]['monthly_data'][0]['nama_bulan'] ?? Carbon::create()->month($month)->format('F'),
-            'yearly_totals' => $yearlyTotals,
-            'first_year_total' => $firstYearTotal,
-            'last_year_total' => $lastYearTotal
-        ];
-    } catch (\Exception $e) {
-        Log::error('Error in getMonthlySummaryStatistics: ' . $e->getMessage());
-        return [
-            'total_growth' => 0,
-            'monthName' => Carbon::create()->month($month)->format('F'),
-            'yearly_totals' => []
+            'valid' => empty($issues),
+            'issues' => $issues,
+            'year' => $tahun
         ];
     }
-}
+
+    /**
+     * Get data quality metrics
+     */
+    public function getDataQualityMetrics($tahun)
+    {
+        $totalRecords = DB::table('v_penerimaan_monthly')
+            ->where('tahun', $tahun)
+            ->count();
+        
+        $nullRecords = DB::table('v_penerimaan_monthly')
+            ->where('tahun', $tahun)
+            ->whereNull('jumlah')
+            ->count();
+        
+        $zeroRecords = DB::table('v_penerimaan_monthly')
+            ->where('tahun', $tahun)
+            ->where('jumlah', 0)
+            ->count();
+        
+        $completeness = $totalRecords > 0 ? (($totalRecords - $nullRecords) / $totalRecords) * 100 : 0;
+        $nonZeroRate = $totalRecords > 0 ? (($totalRecords - $zeroRecords) / $totalRecords) * 100 : 0;
+        
+        return [
+            'total_records' => $totalRecords,
+            'null_records' => $nullRecords,
+            'zero_records' => $zeroRecords,
+            'completeness_rate' => round($completeness, 2),
+            'non_zero_rate' => round($nonZeroRate, 2)
+        ];
+    }
+
+    /**
+     * Get insights and recommendations
+     */
+    public function getInsights($kodeRekeningId, $tahun)
+    {
+        $insights = [];
+        
+        // Get current year data
+        $currentYearData = $this->getSummaryStatistics($tahun, null, $kodeRekeningId);
+        
+        // Get previous year data for comparison
+        $previousYearData = $this->getSummaryStatistics($tahun - 1, null, $kodeRekeningId);
+        
+        // Growth insight
+        if ($currentYearData['growth_from_previous_year'] > 10) {
+            $insights[] = [
+                'type' => 'positive',
+                'message' => "Strong growth of {$currentYearData['growth_from_previous_year']}% compared to previous year"
+            ];
+        } elseif ($currentYearData['growth_from_previous_year'] < -10) {
+            $insights[] = [
+                'type' => 'warning',
+                'message' => "Significant decline of {$currentYearData['growth_from_previous_year']}% compared to previous year"
+            ];
+        }
+        
+        // Seasonal pattern insight
+        $seasonalData = $this->getSeasonalAnalysis($kodeRekeningId, 3);
+        $highestMonth = array_keys($seasonalData['monthly_averages'], max($seasonalData['monthly_averages']))[0];
+        $lowestMonth = array_keys($seasonalData['monthly_averages'], min($seasonalData['monthly_averages']))[0];
+        
+        $insights[] = [
+            'type' => 'info',
+            'message' => "Peak performance typically in " . $this->getMonthName($highestMonth) . 
+                         ", lowest in " . $this->getMonthName($lowestMonth)
+        ];
+        
+        // Consistency insight
+        $monthlyTotals = $currentYearData['monthly_totals'];
+        if (!empty($monthlyTotals)) {
+            $stdDev = $this->calculateStandardDeviation(array_values($monthlyTotals));
+            $mean = array_sum($monthlyTotals) / count($monthlyTotals);
+            $cv = $mean > 0 ? ($stdDev / $mean) * 100 : 0;
+            
+            if ($cv < 20) {
+                $insights[] = [
+                    'type' => 'positive',
+                    'message' => 'Revenue shows consistent monthly performance'
+                ];
+            } elseif ($cv > 50) {
+                $insights[] = [
+                    'type' => 'warning',
+                    'message' => 'High volatility in monthly revenue'
+                ];
+            }
+        }
+        
+        return $insights;
+    }
+
+    /**
+     * Calculate standard deviation
+     */
+    private function calculateStandardDeviation($values)
+    {
+        $count = count($values);
+        if ($count <= 1) {
+            return 0;
+        }
+        
+        $mean = array_sum($values) / $count;
+        $variance = 0;
+        
+        foreach ($values as $value) {
+            $variance += pow($value - $mean, 2);
+        }
+        
+        $variance /= ($count - 1);
+        
+        return sqrt($variance);
+    }
+
+    /**
+     * Helper method to truncate long names
+     */
+    private function truncateName($name, $maxLength = 30)
+    {
+        if (strlen($name) > $maxLength) {
+            return substr($name, 0, $maxLength) . '...';
+        }
+        return $name;
+    }
+
+    /**
+     * Helper method to get month name in Indonesian
+     */
+    private function getMonthName($month)
+    {
+        $months = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret',
+            4 => 'April', 5 => 'Mei', 6 => 'Juni',
+            7 => 'Juli', 8 => 'Agustus', 9 => 'September',
+            10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+        
+        return $months[$month] ?? '';
+    }
 }

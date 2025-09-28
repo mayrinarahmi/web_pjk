@@ -14,7 +14,7 @@ class RolePermissionSeeder extends Seeder
         // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // STEP 1: Buat Permissions (skip jika sudah ada)
+        // STEP 1: Buat Permissions
         $permissions = [
             // Dashboard
             'view-dashboard',
@@ -33,6 +33,7 @@ class RolePermissionSeeder extends Seeder
             'create-kode-rekening',
             'edit-kode-rekening',
             'delete-kode-rekening',
+            'import-kode-rekening',
             
             // Master Data - Target
             'view-target',
@@ -45,6 +46,7 @@ class RolePermissionSeeder extends Seeder
             'create-penerimaan',
             'edit-penerimaan',
             'delete-penerimaan',
+            'import-penerimaan',
             
             // Laporan
             'view-laporan',
@@ -56,22 +58,59 @@ class RolePermissionSeeder extends Seeder
             'edit-users',
             'delete-users',
             
+            // SKPD Management
+            'manage-skpd',
+            'assign-kode-rekening',
+            
             // Backup
             'manage-backup',
         ];
 
         foreach ($permissions as $permission) {
-            // Gunakan firstOrCreate untuk avoid duplicate
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // STEP 2: Buat Roles (skip jika sudah ada)
+        // STEP 2: Buat/Update Roles dengan permissions yang sesuai
         
-        // Administrator - Full Access
+        // 1. SUPER ADMIN - Full Access
+        $superAdminRole = Role::firstOrCreate(['name' => 'Super Admin']);
+        $superAdminRole->syncPermissions(Permission::all());
+        
+        // 2. ADMINISTRATOR (backward compatibility) - Sama seperti Super Admin
         $adminRole = Role::firstOrCreate(['name' => 'Administrator']);
         $adminRole->syncPermissions(Permission::all());
         
-        // Operator - Limited Access
+        // 3. KEPALA BADAN - View Only untuk semua, tidak bisa create/edit/delete
+        $kepalaBadanRole = Role::firstOrCreate(['name' => 'Kepala Badan']);
+        $kepalaBadanRole->syncPermissions([
+            'view-dashboard',
+            'view-trend-analysis',
+            'view-tahun-anggaran',
+            'view-kode-rekening',
+            'view-target',
+            'view-penerimaan',
+            'view-laporan',
+            'export-laporan', // Kepala Badan boleh export laporan
+        ]);
+        
+        // 4. OPERATOR SKPD - Input penerimaan, TANPA akses Master Data
+        $operatorSkpdRole = Role::firstOrCreate(['name' => 'Operator SKPD']);
+        $operatorSkpdRole->syncPermissions([
+            'view-dashboard',
+            // TIDAK ADA permission untuk Master Data (Total Hidden)
+            // TIDAK ADA view-trend-analysis
+            // Penerimaan - full akses untuk SKPD sendiri
+            'view-penerimaan',
+            'create-penerimaan',
+            'edit-penerimaan',
+            'delete-penerimaan',
+            'import-penerimaan',
+            // Laporan
+            'view-laporan',
+            'export-laporan',
+        ]);
+        
+        // 5. OPERATOR (backward compatibility) - Limited Access  
         $operatorRole = Role::firstOrCreate(['name' => 'Operator']);
         $operatorRole->syncPermissions([
             'view-dashboard',
@@ -90,9 +129,14 @@ class RolePermissionSeeder extends Seeder
             'edit-penerimaan',
             'view-laporan',
             'export-laporan',
+            'manage-backup',
+            'view-users',
+            'create-users',
+            'edit-users',
+            'delete-users',
         ]);
         
-        // Viewer - Read Only
+        // 6. VIEWER (backward compatibility) - Read Only
         $viewerRole = Role::firstOrCreate(['name' => 'Viewer']);
         $viewerRole->syncPermissions([
             'view-dashboard',
@@ -100,38 +144,75 @@ class RolePermissionSeeder extends Seeder
             'view-laporan',
         ]);
 
-        // STEP 3: Migrate existing users ke Spatie roles
-        $this->migrateExistingUsers();
+        // STEP 3: Clear existing roles and reassign
+        $this->reassignRoles();
         
-        echo "Seeding completed successfully!\n";
+        echo "Role Permission Seeder completed successfully!\n";
     }
 
-    private function migrateExistingUsers()
+    private function reassignRoles()
     {
-        echo "Migrasi user existing ke Spatie Roles...\n";
+        echo "Reassigning roles to users...\n";
         
-        $users = User::with('role')->get();
+        // Get specific users by NIP
         
-        foreach ($users as $user) {
-            if ($user->role) {
-                // Assign Spatie role berdasarkan role lama
-                switch ($user->role->name) {
-                    case 'Administrator':
-                        $user->syncRoles(['Administrator']);
-                        echo "User {$user->name} => Administrator\n";
-                        break;
-                    case 'Operator':
-                        $user->syncRoles(['Operator']);
-                        echo "User {$user->name} => Operator\n";
-                        break;
-                    case 'Viewer':
-                        $user->syncRoles(['Viewer']);
-                        echo "User {$user->name} => Viewer\n";
-                        break;
-                }
+        // 1. Super Admin
+        $superAdmin = User::where('nip', '198001011990031001')->first();
+        if ($superAdmin) {
+            $superAdmin->syncRoles(['Super Admin']);
+            echo "User {$superAdmin->name} => Super Admin\n";
+        }
+        
+        // 2. Kepala BPKPAD
+        $kepalaBadan = User::where('nip', '196901121993031004')->first();
+        if ($kepalaBadan) {
+            $kepalaBadan->syncRoles(['Kepala Badan']);
+            echo "User {$kepalaBadan->name} => Kepala Badan\n";
+        }
+        
+        // 3. Operator Dinas Kesehatan
+        $operatorDinkes = User::where('nip', '199001011990031001')->first();
+        if ($operatorDinkes) {
+            $operatorDinkes->syncRoles(['Operator SKPD']);
+            echo "User {$operatorDinkes->name} => Operator SKPD (Dinkes)\n";
+        }
+        
+        // 4. Operator Dinas PU
+        $operatorPU = User::where('nip', '199101011991031001')->first();
+        if ($operatorPU) {
+            $operatorPU->syncRoles(['Operator SKPD']);
+            echo "User {$operatorPU->name} => Operator SKPD (PU)\n";
+        }
+        
+        // 5. Viewer
+        $viewer = User::where('nip', '200001012000031001')->first();
+        if ($viewer) {
+            $viewer->syncRoles(['Viewer']);
+            echo "User {$viewer->name} => Viewer\n";
+        }
+        
+        // 6. Handle other users based on their role_id and skpd_id
+        $otherUsers = User::whereNotIn('nip', [
+            '198001011990031001',
+            '196901121993031004', 
+            '199001011990031001',
+            '199101011991031001',
+            '200001012000031001'
+        ])->get();
+        
+        foreach ($otherUsers as $user) {
+            if ($user->role_id == 1 && $user->skpd_id == null) {
+                $user->syncRoles(['Administrator']);
+                echo "User {$user->name} => Administrator\n";
+            } elseif ($user->role_id == 2 && $user->skpd_id == null) {
+                $user->syncRoles(['Operator']);
+                echo "User {$user->name} => Operator\n";
+            } elseif ($user->role_id == 3) {
+                $user->syncRoles(['Viewer']);
+                echo "User {$user->name} => Viewer\n";
             }
         }
         
-        echo "Migrasi selesai!\n";
+        echo "Role reassignment completed!\n";
     }
 }

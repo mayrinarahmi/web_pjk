@@ -20,12 +20,16 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     use Importable, SkipsFailures;
     
     private $tahun;
+    private $skpdId;      // TAMBAHAN
+    private $createdBy;   // TAMBAHAN
     private $processedCount = 0;
     private $skippedCount = 0;
     
-    public function __construct($tahun)
+    public function __construct($tahun, $skpdId = null, $createdBy = null)
     {
         $this->tahun = $tahun;
+        $this->skpdId = $skpdId;        // TAMBAHAN
+        $this->createdBy = $createdBy;  // TAMBAHAN
     }
     
     /**
@@ -50,6 +54,13 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 return null;
             }
             
+            // TAMBAHAN: Validasi kode rekening harus level 6
+            if ($kodeRekening->level != 6) {
+                Log::warning("Kode rekening '{$row['kode']}' bukan level 6, skip import");
+                $this->skippedCount++;
+                return null;
+            }
+            
             // Parse tanggal - handle berbagai format
             $tanggal = $this->parseDate($row['tanggal']);
             if (!$tanggal) {
@@ -58,7 +69,7 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 return null;
             }
             
-            // Clean jumlah value
+            // Clean jumlah value - bisa terima nilai minus
             $jumlah = $this->cleanCurrencyValue($row['jumlah']);
             
             // Validasi tahun dari tanggal harus sesuai dengan tahun yang dipilih
@@ -70,13 +81,15 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             
             $this->processedCount++;
             
-            // Create penerimaan
+            // Create penerimaan dengan SKPD ID
             return new Penerimaan([
                 'kode_rekening_id' => $kodeRekening->id,
                 'tahun' => $this->tahun,
                 'tanggal' => $tanggal,
                 'jumlah' => $jumlah,
                 'keterangan' => $row['keterangan'] ?? null,
+                'skpd_id' => $this->skpdId,        // TAMBAHAN
+                'created_by' => $this->createdBy,  // TAMBAHAN
             ]);
             
         } catch (\Exception $e) {
@@ -122,6 +135,7 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     
     /**
      * Clean currency format dari value
+     * Support nilai minus/negatif
      */
     private function cleanCurrencyValue($value)
     {
@@ -133,14 +147,28 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
         // Convert to string first
         $valueStr = strval($value);
         
-        // Hapus "Rp", spasi, titik sebagai pemisah ribuan
-        $cleaned = preg_replace('/[Rp\s\.]/', '', $valueStr);
+        // Check if negative (bisa pakai tanda minus atau dalam kurung)
+        $isNegative = false;
+        if (strpos($valueStr, '-') !== false || 
+            (strpos($valueStr, '(') !== false && strpos($valueStr, ')') !== false)) {
+            $isNegative = true;
+        }
+        
+        // Hapus semua karakter non-numeric kecuali koma dan titik
+        $cleaned = preg_replace('/[^0-9,.]/', '', $valueStr);
         
         // Ganti koma dengan titik untuk desimal
         $cleaned = str_replace(',', '.', $cleaned);
         
         // Convert ke float
-        return floatval($cleaned);
+        $numericValue = floatval($cleaned);
+        
+        // Apply negative if needed
+        if ($isNegative && $numericValue > 0) {
+            $numericValue = -$numericValue;
+        }
+        
+        return $numericValue;
     }
     
     /**
@@ -151,7 +179,7 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
         return [
             'kode' => 'required',
             'tanggal' => 'required',
-            'jumlah' => 'required|numeric|min:0',
+            'jumlah' => 'required|numeric', // PERUBAHAN: Hapus min:0 untuk support nilai minus
         ];
     }
     
@@ -165,7 +193,7 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             'tanggal.required' => 'Tanggal tidak boleh kosong',
             'jumlah.required' => 'Jumlah tidak boleh kosong',
             'jumlah.numeric' => 'Jumlah harus berupa angka',
-            'jumlah.min' => 'Jumlah tidak boleh negatif',
+            // PERUBAHAN: Hapus message untuk min karena sudah dihapus rule-nya
         ];
     }
     

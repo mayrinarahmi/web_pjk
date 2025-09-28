@@ -3,163 +3,259 @@
 namespace App\Imports;
 
 use App\Models\KodeRekening;
-use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
-use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\SkipsOnError;
-use Maatwebsite\Excel\Concerns\SkipsErrors;
-use Maatwebsite\Excel\Concerns\Importable;
-use Maatwebsite\Excel\Concerns\WithBatchInserts;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class KodeRekeningImport implements 
-    ToModel, 
-    WithHeadingRow, 
-    WithValidation, 
-    SkipsEmptyRows, // Tambahan ini untuk skip baris kosong
-    SkipsOnError, 
-    WithBatchInserts, 
-    WithChunkReading
+class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
 {
-    use Importable, SkipsErrors;
-    
-    private $processedKodes = [];
+    protected $errors = [];
+    protected $processedCount = 0;
+    protected $skippedCount = 0;
     
     /**
-     * Transform setiap row Excel menjadi model
+     * Process the entire collection at once to handle parent-child relationships
      */
-    public function model(array $row)
+    public function collection(Collection $rows)
     {
+        // Clean and prepare data first
+        $cleanedRows = $rows->map(function ($row) {
+            return [
+                'kode' => $this->cleanKode($row['kode'] ?? ''),
+                'nama' => $this->cleanNama($row['nama'] ?? ''),
+                'level' => $this->cleanLevel($row['level'] ?? '')
+            ];
+        });
+        
+        // Group rows by level for ordered processing
+        $groupedByLevel = $cleanedRows->groupBy('level')->sortKeys();
+        
+        DB::beginTransaction();
+        
         try {
-            // Skip jika semua kolom kosong
-            if (empty($row['kode']) && empty($row['nama']) && empty($row['level'])) {
-                return null;
+            // Process each level in order (1, 2, 3, 4, 5, 6)
+            foreach ($groupedByLevel as $level => $levelRows) {
+                foreach ($levelRows as $row) {
+                    $this->processRow($row, $level);
+                }
             }
             
-            // Skip jika kode sudah diproses
-            if (in_array($row['kode'], $this->processedKodes)) {
-                return null;
-            }
+            DB::commit();
             
-            // Log untuk debugging
-            Log::info('Processing row:', $row);
-            
-            // Cek apakah kode sudah ada di database
-            $existing = KodeRekening::where('kode', $row['kode'])->first();
-            if ($existing) {
-                // Update data yang sudah ada
-                $existing->update([
-                    'nama' => $row['nama'],
-                    'level' => $row['level'],
-                    'is_active' => 1,
-                ]);
-                
-                $this->processedKodes[] = $row['kode'];
-                return null;
-            }
-            
-            // Tentukan parent_id berdasarkan kode
-            $parentId = $this->findParentId($row['kode'], $row['level']);
-            
-            if ($parentId === false) {
-                throw new \Exception("Parent kode tidak ditemukan untuk kode: {$row['kode']}");
-            }
-            
-            $this->processedKodes[] = $row['kode'];
-            
-            return new KodeRekening([
-                'kode' => $row['kode'],
-                'nama' => $row['nama'],
-                'level' => $row['level'],
-                'parent_id' => $parentId,
-                'is_active' => 1,
-            ]);
+            Log::info("Import completed. Processed: {$this->processedCount}, Skipped: {$this->skippedCount}");
             
         } catch (\Exception $e) {
-            Log::error('Error processing row: ' . $e->getMessage(), ['row' => $row]);
+            DB::rollBack();
             throw $e;
         }
     }
     
     /**
-     * Cari parent_id berdasarkan struktur kode
+     * Clean kode value - handle numeric and string formats
      */
-    private function findParentId($kode, $level)
+    protected function cleanKode($value)
     {
-        if ($level == 1) {
-            return null;
+        // Convert to string first
+        $value = (string) $value;
+        
+        // Remove any whitespace
+        $value = trim($value);
+        
+        // Remove any quotes
+        $value = trim($value, '"\'');
+        
+        // Handle scientific notation (jika ada)
+        if (stripos($value, 'E+') !== false || stripos($value, 'E-') !== false) {
+            $value = number_format((float)$value, 0, '', '');
         }
         
-        // Pecah kode berdasarkan titik
-        $parts = explode('.', $kode);
+        // Ensure dots are preserved (not converted to comma)
+        $value = str_replace(',', '.', $value);
         
-        // Buat struktur parent
-        $parentParts = array_slice($parts, 0, -1);
-        $parentKode = implode('.', $parentParts);
-        
-        // Cari parent di database
-        $parent = KodeRekening::where('kode', $parentKode)->first();
-        
-        if (!$parent) {
-            Log::warning("Parent kode '{$parentKode}' tidak ditemukan untuk kode '{$kode}'");
-            return false; // Return false jika parent tidak ada
-        }
-        
-        return $parent->id;
+        return $value;
     }
     
     /**
-     * Aturan validasi - hanya untuk row yang tidak kosong
+     * Clean nama value
+     */
+    protected function cleanNama($value)
+    {
+        // Convert to string
+        $value = (string) $value;
+        
+        // Trim whitespace
+        $value = trim($value);
+        
+        // Remove any extra spaces
+        $value = preg_replace('/\s+/', ' ', $value);
+        
+        return $value;
+    }
+    
+    /**
+     * Clean level value - ensure it's numeric
+     */
+    protected function cleanLevel($value)
+    {
+        // Convert to integer
+        $value = (int) $value;
+        
+        // Validate range
+        if ($value < 1 || $value > 6) {
+            return 0; // Invalid level
+        }
+        
+        return $value;
+    }
+    
+    protected function processRow($row, $level)
+    {
+        try {
+            $kode = $row['kode'];
+            $nama = $row['nama'];
+            
+            // Skip if empty
+            if (empty($kode) || empty($nama)) {
+                $this->errors[] = "Data kosong ditemukan, dilewati";
+                $this->skippedCount++;
+                return;
+            }
+            
+            // Validate level
+            if ($level < 1 || $level > 6) {
+                $this->errors[] = "Level tidak valid untuk kode {$kode}: {$level}";
+                $this->skippedCount++;
+                return;
+            }
+            
+            // Validate level matches kode format
+            $expectedLevel = $this->calculateLevelFromKode($kode);
+            if ($expectedLevel != $level) {
+                $this->errors[] = "Kode {$kode} tidak sesuai dengan level {$level}. Seharusnya level {$expectedLevel}";
+                $this->skippedCount++;
+                return;
+            }
+            
+            // Check if already exists
+            $existing = KodeRekening::where('kode', $kode)->first();
+            if ($existing) {
+                // Update existing if needed
+                $existing->update([
+                    'nama' => $nama,
+                    'is_active' => true
+                ]);
+                Log::info("Kode {$kode} sudah ada, diupdate");
+                $this->skippedCount++;
+                return;
+            }
+            
+            // Find parent (for level > 1)
+            $parentId = null;
+            if ($level > 1) {
+                $parentKode = $this->getParentKode($kode);
+                $parent = KodeRekening::where('kode', $parentKode)->first();
+                
+                if (!$parent) {
+                    $this->errors[] = "Parent kode tidak ditemukan untuk kode: {$kode}. Parent yang dicari: {$parentKode}";
+                    $this->skippedCount++;
+                    return;
+                }
+                
+                $parentId = $parent->id;
+            }
+            
+            // Create kode rekening
+            KodeRekening::create([
+                'kode' => $kode,
+                'nama' => $nama,
+                'level' => $level,
+                'parent_id' => $parentId,
+                'is_active' => true
+            ]);
+            
+            $this->processedCount++;
+            
+            Log::info("Successfully imported: {$kode} - {$nama} (Level {$level})");
+            
+        } catch (\Exception $e) {
+            $this->errors[] = "Error processing kode {$row['kode']}: " . $e->getMessage();
+            $this->skippedCount++;
+            Log::error("Error importing row: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Calculate level from kode format
+     */
+    protected function calculateLevelFromKode($kode)
+    {
+        // Count dots in kode to determine level
+        $parts = explode('.', $kode);
+        return count($parts);
+    }
+    
+    /**
+     * Get parent kode from current kode
+     */
+    protected function getParentKode($kode)
+    {
+        $parts = explode('.', $kode);
+        array_pop($parts); // Remove last part
+        return implode('.', $parts);
+    }
+    
+    /**
+     * Validation rules - UPDATED to be more flexible
      */
     public function rules(): array
     {
         return [
-            'kode' => 'required|string|max:50',
-            'nama' => 'required|string|max:255',
-            'level' => 'required|integer|between:1,6',
+            // Remove strict string validation, we'll handle conversion
+            '*.kode' => 'required',
+            '*.nama' => 'required',
+            '*.level' => 'required|numeric|min:1|max:6',
         ];
     }
     
     /**
-     * Pesan error custom
+     * Custom validation messages
      */
     public function customValidationMessages()
     {
         return [
-            'kode.required' => 'Kolom kode harus diisi',
-            'kode.max' => 'Kode maksimal 50 karakter',
-            'nama.required' => 'Kolom nama harus diisi',
-            'nama.max' => 'Nama maksimal 255 karakter',
-            'level.required' => 'Kolom level harus diisi',
-            'level.integer' => 'Level harus berupa angka',
-            'level.between' => 'Level harus antara 1-6',
+            '*.kode.required' => 'Kolom kode wajib diisi',
+            '*.nama.required' => 'Kolom nama wajib diisi', 
+            '*.level.required' => 'Kolom level wajib diisi',
+            '*.level.numeric' => 'Level harus berupa angka',
+            '*.level.min' => 'Level minimal adalah 1',
+            '*.level.max' => 'Level maksimal adalah 6',
         ];
     }
     
     /**
-     * Batch size untuk insert
+     * Get import errors
      */
-    public function batchSize(): int
+    public function errors()
     {
-        return 100;
+        return $this->errors;
     }
     
     /**
-     * Chunk size untuk reading
+     * Get processed count
      */
-    public function chunkSize(): int
+    public function getProcessedCount()
     {
-        return 100;
+        return $this->processedCount;
     }
     
     /**
-     * Skip row on error
+     * Get skipped count
      */
-    public function onError(\Throwable $e)
+    public function getSkippedCount()
     {
-        Log::error('Import error: ' . $e->getMessage());
+        return $this->skippedCount;
     }
 }

@@ -7,6 +7,13 @@
             </a>
         </div>
         <div class="card-body">
+            <!-- TAMBAHAN: Display SKPD Info -->
+            @if($userSkpdInfo)
+            <div class="alert alert-info py-2">
+                <i class="bx bx-info-circle"></i> {{ $userSkpdInfo }}
+            </div>
+            @endif
+            
             <!-- Feedback messages -->
             @if(session()->has('message'))
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -60,7 +67,7 @@
                     <select class="form-select @error('kode_rekening_id') is-invalid @enderror" 
                         id="kode_rekening_id" wire:model="kode_rekening_id">
                         <option value="">Pilih Kode Rekening</option>
-                        @foreach($kodeRekeningLevel5 as $kr)
+                        @foreach($kodeRekeningLevel6 as $kr)
                             <option value="{{ $kr->id }}">{{ $kr->kode }} - {{ $kr->nama }}</option>
                         @endforeach
                     </select>
@@ -68,7 +75,13 @@
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                     <div class="form-text">
-                        <i class="bx bx-info-circle"></i> Hanya kode rekening level 5 yang dapat dipilih
+                        <i class="bx bx-info-circle"></i> Hanya kode rekening level 6 yang dapat dipilih
+                        @if(count($kodeRekeningLevel6) == 0)
+                            <br><span class="text-warning">
+                                <i class="bx bx-exclamation-triangle"></i> 
+                                Tidak ada kode rekening yang tersedia. Hubungi administrator.
+                            </span>
+                        @endif
                     </div>
                 </div>
                 
@@ -77,10 +90,13 @@
                     <div class="input-group">
                         <span class="input-group-text">Rp</span>
                         <input type="number" class="form-control @error('jumlah') is-invalid @enderror" 
-                            id="jumlah" wire:model="jumlah" placeholder="0" min="0" step="0.01">
+                            id="jumlah" wire:model="jumlah" placeholder="0" step="0.01">
                         @error('jumlah')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
+                    </div>
+                    <div class="form-text">
+                        <i class="bx bx-info-circle"></i> Gunakan tanda minus (-) untuk koreksi/pengembalian. Contoh: -1000000
                     </div>
                 </div>
                 

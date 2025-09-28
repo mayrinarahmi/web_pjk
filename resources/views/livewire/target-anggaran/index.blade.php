@@ -2,17 +2,14 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Daftar Target Anggaran</h5>
-            {{-- Tombol Actions - Hide untuk Viewer --}}
-            @canany(['create-target', 'import-target', 'edit-target'])
-            <div class="btn-group">
-                @can('import-target')
+            {{-- Tombol Actions --}}
+            <div class="d-flex gap-2">
                 <button type="button" class="btn btn-success btn-sm" wire:click="toggleImportModal">
                     <i class="bx bx-upload"></i> Import Excel
                 </button>
-                @endcan
                 @can('create-target')
                 <a href="{{ route('target-anggaran.create') }}" class="btn btn-primary btn-sm">
-                    <i class="bx bx-plus"></i> Tambah Target Anggaran
+                    <i class="bx bx-plus"></i> Tambah Target
                 </a>
                 @endcan
                 @can('edit-target')
@@ -26,7 +23,6 @@
                 </button>
                 @endcan
             </div>
-            @endcanany
         </div>
         <div class="card-body">
             <!-- Info tentang tahun anggaran aktif -->
@@ -62,6 +58,14 @@
                 </div>
             @endif
             
+            @if(session()->has('success'))
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    {{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            @endif
+            
+            <!-- Filter Section -->
             <div class="row mb-3">
                 <div class="col-md-3">
                     <label for="tahunAnggaranId" class="form-label">Tahun Anggaran</label>
@@ -79,7 +83,7 @@
                     <label for="search" class="form-label">Cari</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="bx bx-search"></i></span>
-                        <input type="text" class="form-control" placeholder="Cari kode atau nama rekening..." 
+                        <input type="text" id="searchInput" class="form-control" placeholder="Cari kode atau nama rekening..." 
                                wire:model.live.debounce.500ms="search">
                         <button class="btn btn-outline-primary" type="button" wire:click="performSearch">
                             Cari
@@ -114,8 +118,8 @@
                         <div class="col-md-12">
                             <h6 class="mb-2"><i class="bx bx-info-circle"></i> Informasi Hierarki Target Anggaran:</h6>
                             <ul class="mb-0">
-                                <li><strong>Level 5:</strong> Input manual (kode rekening detail)</li>
-                                <li><strong>Level 1-4:</strong> Otomatis dihitung dari SUM children</li>
+                                <li><strong>Level 6:</strong> Input manual (kode rekening detail)</li>
+                                <li><strong>Level 1-5:</strong> Otomatis dihitung dari SUM children</li>
                                 <li><span class="badge bg-success">✓</span> Konsisten - <span class="badge bg-warning">⚠</span> Tidak konsisten</li>
                             </ul>
                         </div>
@@ -124,7 +128,7 @@
             @endif
             
             <!-- Loading indicator -->
-            <div wire:loading wire:target="search, tahunAnggaranId, toggleLevel, updateHierarchi" class="mb-3">
+            <div wire:loading wire:target="search, tahunAnggaranId, toggleLevel, updateHierarchi, performSearch" class="mb-3">
                 <div class="d-flex align-items-center text-primary">
                     <div class="spinner-border spinner-border-sm me-2" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -133,8 +137,9 @@
                 </div>
             </div>
             
+            <!-- Data Table -->
             <div class="table-responsive">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover" id="dataTable">
                     <thead class="table-light">
                         <tr>
                             <th width="15%">Kode</th>
@@ -150,7 +155,7 @@
                     </thead>
                     <tbody>
                         @forelse($kodeRekening as $kr)
-                        <tr class="{{ $kr->level == 1 ? 'table-primary' : ($kr->level == 2 ? 'table-info' : ($kr->level == 3 ? 'table-light' : ($kr->level == 4 ? 'table-warning' : ($kr->level == 5 ? 'table-success' : '')))) }}">
+                        <tr class="level-{{ $kr->level }} {{ $kr->level == 1 ? 'table-primary' : ($kr->level == 2 ? 'table-info' : ($kr->level == 3 ? 'table-light' : ($kr->level == 4 ? 'table-warning' : ($kr->level == 5 ? 'table-success' : 'table-secondary')))) }}">
                             <td>
                                 <code>{{ $kr->kode }}</code>
                             </td>
@@ -171,7 +176,7 @@
                             </td>
                             <td class="text-center">
                                 @if($tahunAnggaranId)
-                                    @if($kr->level == 5)
+                                    @if($kr->level == 6)
                                         <span class="badge bg-primary" title="Input Manual">M</span>
                                     @else
                                         @if(isset($kr->is_consistent))
@@ -189,7 +194,7 @@
                             {{-- Tombol Aksi - Hide untuk Viewer --}}
                             @canany(['edit-target', 'create-target'])
                             <td>
-                                @if($kr->level == 5 && $tahunAnggaranId)
+                                @if($kr->level == 6 && $tahunAnggaranId)
                                     @php
                                         $targetAnggaranObj = App\Models\TargetAnggaran::where('kode_rekening_id', $kr->id)
                                             ->where('tahun_anggaran_id', $tahunAnggaranId)
@@ -209,14 +214,14 @@
                                         </a>
                                         @endcan
                                     @endif
-                                @elseif($kr->level < 5)
+                                @elseif($kr->level < 6)
                                     <span class="badge bg-info" title="Otomatis dari children">Auto</span>
                                 @endif
                             </td>
                             @endcanany
                         </tr>
                         @empty
-                        <tr>
+                        <tr class="no-data-row">
                             <td colspan="{{ auth()->user()->canany(['edit-target', 'create-target']) ? '6' : '5' }}" class="text-center">
                                 @if($tahunAnggaranId)
                                     Tidak ada data untuk filter yang dipilih.
@@ -246,15 +251,18 @@
                 <div class="col-md-2"><span class="badge bg-light text-dark">Level 3</span> Jenis</div>
                 <div class="col-md-2"><span class="badge bg-warning">Level 4</span> Objek</div>
                 <div class="col-md-2"><span class="badge bg-success">Level 5</span> Rincian Objek</div>
+                <div class="col-md-2"><span class="badge bg-secondary">Level 6</span> Sub Rincian</div>
             </div>
         </div>
     </div>
     
-    <!-- Modal Import Excel - Hide untuk Viewer -->
-    @can('import-target')
-    @if($showImportModal)
-    <div class="modal fade show" style="display: block;" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg" role="document">
+    <!-- Import Modal -->
+    <div class="modal fade @if($showImportModal) show @endif" 
+         tabindex="-1" 
+         style="display: @if($showImportModal) block @else none @endif;" 
+         aria-modal="true" 
+         role="dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Import Pagu Anggaran dari Excel</h5>
@@ -274,87 +282,113 @@
                             </div>
                         @endif
                         
-                        {{-- Tahun Anggaran Info --}}
-                        @if($tahunAnggaranId)
-                            @php
-                                $selectedTahun = \App\Models\TahunAnggaran::find($tahunAnggaranId);
-                            @endphp
-                            <div class="alert alert-info">
-                                <strong>Tahun Anggaran:</strong> {{ $selectedTahun->tahun }} - {{ strtoupper($selectedTahun->jenis_anggaran) }}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="importTahunAnggaranId" class="form-label">Tahun Anggaran <span class="text-danger">*</span></label>
+                                <select class="form-select @error('tahunAnggaranId') is-invalid @enderror" 
+                                        wire:model="tahunAnggaranId" disabled>
+                                    <option value="">Pilih Tahun Anggaran</option>
+                                    @foreach($tahunAnggaran as $ta)
+                                        <option value="{{ $ta->id }}">
+                                            {{ $ta->tahun }} - {{ strtoupper($ta->jenis_anggaran) }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @if($tahunAnggaranId)
+                                    @php
+                                        $selectedTahun = \App\Models\TahunAnggaran::find($tahunAnggaranId);
+                                    @endphp
+                                    <small class="text-muted">
+                                        Import akan dilakukan untuk: {{ $selectedTahun->tahun }} - {{ strtoupper($selectedTahun->jenis_anggaran) }}
+                                    </small>
+                                @else
+                                    <small class="text-danger">Pilih tahun anggaran di filter terlebih dahulu!</small>
+                                @endif
                             </div>
-                        @else
-                            <div class="alert alert-warning">
-                                <strong>Perhatian:</strong> Pilih tahun anggaran terlebih dahulu sebelum import!
+                            <div class="col-md-6">
+                                <label for="importFile" class="form-label">File Excel <span class="text-danger">*</span></label>
+                                <input type="file" 
+                                       class="form-control @error('importFile') is-invalid @enderror" 
+                                       wire:model="importFile" 
+                                       accept=".xlsx,.xls"
+                                       @if(!$tahunAnggaranId) disabled @endif>
+                                @error('importFile')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                                
+                                <div wire:loading wire:target="importFile" class="mt-2">
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" 
+                                             style="width: 100%">
+                                            Uploading...
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                @if($importFile)
+                                    <small class="text-success mt-1 d-block">
+                                        <i class="bx bx-check"></i> File siap: {{ $importFile->getClientOriginalName() }}
+                                    </small>
+                                @endif
                             </div>
-                        @endif
+                        </div>
                         
-                        {{-- Format Info --}}
-                        <div class="alert alert-light">
-                            <h6>Format Excel yang dibutuhkan:</h6>
-                            <table class="table table-sm table-bordered mt-2">
-                                <thead>
-                                    <tr>
-                                        <th>kode</th>
-                                        <th>pagu_anggaran</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>4</td>
-                                        <td>18921761959</td>
-                                    </tr>
-                                    <tr>
-                                        <td>4.1</td>
-                                        <td>4500000000</td>
-                                    </tr>
-                                    <tr>
-                                        <td>4.1.01</td>
-                                        <td>Rp 4.500.000.000</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading"><i class="bx bx-info-circle"></i> Petunjuk Import</h6>
+                            <hr>
+                            <ul class="mb-0">
+                                <li>Download template Excel terlebih dahulu</li>
+                                <li>Kolom yang wajib diisi: <strong>kode</strong> dan <strong>pagu_anggaran</strong></li>
+                                <li>Kode rekening harus sudah terdaftar di sistem</li>
+                                <li>Format angka bisa dengan atau tanpa "Rp" dan pemisah ribuan</li>
+                                <li>Import hanya untuk kode rekening level 6</li>
+                                <li>Hierarki level 1-5 akan otomatis dihitung ulang setelah import</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>Format Template:</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>kode</th>
+                                            <th>pagu_anggaran</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted">
+                                                <em>Template kosong - isi sesuai data yang akan diimport</em>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                             <small class="text-muted">
                                 * Header harus <strong>huruf kecil</strong><br>
-                                * Format angka bisa dengan atau tanpa "Rp" dan pemisah ribuan
+                                * Hanya kode level 6 yang diimport, level 1-5 akan dihitung otomatis
                             </small>
-                            <div class="mt-2">
-                                <button type="button" wire:click="downloadTemplate" class="btn btn-sm btn-primary">
-                                    <i class="bx bx-download"></i> Download Template
-                                </button>
-                            </div>
-                        </div>
-                        
-                        {{-- File Upload --}}
-                        <div class="mb-3">
-                            <label for="importFile" class="form-label">Pilih File Excel</label>
-                            <input type="file" class="form-control @error('importFile') is-invalid @enderror" 
-                                   id="importFile" wire:model="importFile" accept=".xlsx,.xls"
-                                   @if(!$tahunAnggaranId) disabled @endif>
-                            @error('importFile')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-                        
-                        <div wire:loading wire:target="importFile" class="text-primary">
-                            <i class="bx bx-loader-alt bx-spin"></i> Mengupload file...
-                        </div>
-                        
-                        <div class="alert alert-warning mt-3">
-                            <h6>Tips:</h6>
-                            <ul class="mb-0 small">
-                                <li>Import hanya untuk kode rekening yang sudah ada di sistem</li>
-                                <li>Data pagu anggaran akan di-update jika sudah ada</li>
-                                <li>Hierarki akan otomatis dihitung ulang setelah import</li>
-                            </ul>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" wire:click="toggleImportModal">Batal</button>
-                        <button type="submit" class="btn btn-primary" wire:loading.attr="disabled"
-                                @if(!$tahunAnggaranId) disabled @endif>
-                            <span wire:loading.remove wire:target="import">Import</span>
+                        <button type="button" class="btn btn-success" wire:click="downloadTemplate">
+                            <i class="bx bx-download"></i> Download Template
+                        </button>
+                        <button type="button" class="btn btn-secondary" wire:click="toggleImportModal">
+                            Batal
+                        </button>
+                        <button type="submit" class="btn btn-primary" 
+                                wire:loading.attr="disabled"
+                                wire:target="import"
+                                {{ !$tahunAnggaranId || !$importFile ? 'disabled' : '' }}>
+                            <span wire:loading.remove wire:target="import">
+                                <i class="bx bx-upload"></i> Import
+                            </span>
                             <span wire:loading wire:target="import">
-                                <i class="bx bx-loader-alt bx-spin"></i> Memproses...
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                Processing...
                             </span>
                         </button>
                     </div>
@@ -362,10 +396,13 @@
             </div>
         </div>
     </div>
-    <div class="modal-backdrop fade show"></div>
-    @endif
-    @endcan
     
+    <!-- Modal Backdrop -->
+    @if($showImportModal)
+        <div class="modal-backdrop fade show"></div>
+    @endif
+    
+    <!-- Styles -->
     <style>
         .table-success {
             background-color: rgba(25, 135, 84, 0.1) !important;
@@ -378,6 +415,25 @@
         }
         .table-primary {
             background-color: rgba(13, 110, 253, 0.1) !important;
+        }
+        .table-secondary {
+            background-color: rgba(108, 117, 125, 0.1) !important;
+        }
+        
+        /* Modal animations */
+        .modal.show {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </div>

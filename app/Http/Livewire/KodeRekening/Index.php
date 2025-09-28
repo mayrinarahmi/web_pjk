@@ -14,7 +14,17 @@ class Index extends Component
 {
     use WithPagination, WithFileUploads;
     
-    public $showHierarchy = true;
+    // Search & Filter - DITAMBAHKAN
+    public $search = '';
+    public $levelFilter = '';
+    public $statusFilter = '';
+    
+    // Pagination - DITAMBAHKAN
+    public $perPage = 25;
+    public $perPageOptions = [10, 25, 50, 100, 200, 500];
+    
+    // Existing properties
+    public $showHierarchy = false; // DIUBAH default ke false untuk table view
     public $importFile;
     public $showImportModal = false;
     public $importErrors = [];
@@ -22,9 +32,38 @@ class Index extends Component
     
     protected $listeners = ['kodeRekeningDeleted' => '$refresh'];
     
+    // Query String - DITAMBAHKAN
+    protected $queryString = [
+        'search' => ['except' => ''],
+        'levelFilter' => ['except' => ''],
+        'statusFilter' => ['except' => ''],
+        'perPage' => ['except' => 25],
+    ];
+    
     protected $rules = [
         'importFile' => 'required|file|mimes:xlsx,xls|max:10240',
     ];
+    
+    // Update methods - DITAMBAHKAN
+    public function updatingSearch()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedLevelFilter()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedStatusFilter()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedPerPage()
+    {
+        $this->resetPage();
+    }
     
     public function toggleImportModal()
     {
@@ -44,18 +83,25 @@ class Index extends Component
             $import = new KodeRekeningImport;
             Excel::import($import, $this->importFile);
             
-            // Cek errors dari import (jika ada)
-            if (method_exists($import, 'errors') && count($import->errors()) > 0) {
-                foreach ($import->errors() as $error) {
-                    $this->importErrors[] = $error->getMessage();
+            // Get import statistics
+            $processedCount = $import->getProcessedCount();
+            $skippedCount = $import->getSkippedCount();
+            $errors = $import->errors();
+            
+            // Handle errors
+            if (count($errors) > 0) {
+                foreach ($errors as $error) {
+                    $this->importErrors[] = $error;
                 }
             }
             
-            // Tampilkan pesan sukses atau warning
-            if (count($this->importErrors) > 0) {
-                session()->flash('warning', 'Import selesai dengan beberapa warning.');
+            // Show appropriate message
+            if (count($errors) > 0) {
+                session()->flash('warning', "Import selesai dengan beberapa warning. Berhasil: {$processedCount}, Dilewati: {$skippedCount}");
+            } else if ($skippedCount > 0) {
+                session()->flash('info', "Import selesai. Berhasil: {$processedCount}, Dilewati: {$skippedCount} (data sudah ada)");
             } else {
-                session()->flash('success', 'Data kode rekening berhasil diimport.');
+                session()->flash('success', "Data kode rekening berhasil diimport. Total: {$processedCount} data.");
                 $this->showImportModal = false;
                 $this->importFile = null;
             }
@@ -80,6 +126,7 @@ class Index extends Component
         } catch (\Exception $e) {
             // Log error untuk debugging
             Log::error('Import Error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             
             // Parse error message
             $errorMessage = 'Terjadi kesalahan: ';
@@ -89,7 +136,7 @@ class Index extends Component
             } elseif (strpos($e->getMessage(), 'Parent kode tidak ditemukan') !== false) {
                 $errorMessage .= $e->getMessage();
             } else {
-                $errorMessage .= 'Silakan cek format file Excel Anda.';
+                $errorMessage .= $e->getMessage();
             }
             
             session()->flash('error', $errorMessage);
@@ -102,16 +149,43 @@ class Index extends Component
         $templatePath = public_path('templates/template_kode_rekening.xlsx');
         
         if (!file_exists($templatePath)) {
-            session()->flash('error', 'Template file tidak ditemukan.');
-            return;
+            // Create template on the fly if not exists
+            return $this->createAndDownloadTemplate();
         }
         
-        return response()->download($templatePath);
+        return response()->download($templatePath, 'template_kode_rekening.xlsx');
     }
     
+    protected function createAndDownloadTemplate()
+    {
+        $headers = ['kode', 'nama', 'level'];
+        $data = [
+            ['4', 'PENDAPATAN DAERAH', 1],
+            ['4.1', 'PENDAPATAN ASLI DAERAH (PAD)', 2],
+            ['4.1.01', 'Pajak Daerah', 3],
+            ['4.1.01.09', 'Pajak Reklame', 4],
+            ['4.1.01.09.01', 'Pajak Reklame Papan/Billboard/Videotron/Megatron', 5],
+            ['4.1.01.09.01.0001', 'Pajak Reklame Papan/Billboard/Videotron/Megatron', 6],
+        ];
+        
+        // Create temporary file
+        $filename = 'template_kode_rekening_' . date('YmdHis') . '.xlsx';
+        $filePath = storage_path('app/public/' . $filename);
+        
+        // You might need to use a package like PhpSpreadsheet here
+        // For now, return error
+        session()->flash('error', 'Template tidak dapat dibuat. Silakan hubungi administrator.');
+        return back();
+    }
+    
+    // Reset Filters - DIUPDATE
     public function resetFilters()
     {
-        $this->showHierarchy = true;
+        $this->search = '';
+        $this->levelFilter = '';
+        $this->statusFilter = '';
+        $this->perPage = 25;
+        $this->showHierarchy = false;
         $this->resetPage();
     }
     
@@ -119,12 +193,18 @@ class Index extends Component
     {
         $kodeRekening = KodeRekening::find($id);
         
+        if (!$kodeRekening) {
+            session()->flash('error', 'Kode rekening tidak ditemukan.');
+            return;
+        }
+        
         if ($kodeRekening->children()->count() > 0) {
             session()->flash('error', 'Kode rekening tidak dapat dihapus karena memiliki sub-kode rekening.');
             return;
         }
         
-        if ($kodeRekening->level == 4 && $kodeRekening->penerimaan()->count() > 0) {
+        // Check for related data based on level
+        if ($kodeRekening->level == 6 && $kodeRekening->penerimaan()->count() > 0) {
             session()->flash('error', 'Kode rekening tidak dapat dihapus karena memiliki data penerimaan terkait.');
             return;
         }
@@ -143,7 +223,8 @@ class Index extends Component
     public function render()
     {
         if ($this->showHierarchy) {
-            $kodeRekening = KodeRekening::whereNull('parent_id')
+            // Get root level (level 1) with nested eager loading
+            $kodeRekening = KodeRekening::where('level', 1)
                 ->with(['children' => function($query) {
                     $query->orderBy('kode');
                     $query->with(['children' => function($query) {
@@ -166,10 +247,33 @@ class Index extends Component
                 'kodeRekening' => $kodeRekening
             ]);
         } else {
-            $kodeRekening = KodeRekening::orderBy('kode')->paginate(15);
+            // Table view with pagination - DIUPDATE
+            $query = KodeRekening::query();
+            
+            // Apply filters
+            if ($this->search) {
+                $query->where(function($q) {
+                    $q->where('kode', 'like', '%' . $this->search . '%')
+                      ->orWhere('nama', 'like', '%' . $this->search . '%');
+                });
+            }
+            
+            if ($this->levelFilter) {
+                $query->where('level', $this->levelFilter);
+            }
+            
+            if ($this->statusFilter !== '') {
+                $query->where('is_active', $this->statusFilter);
+            }
+            
+            // Order and paginate
+            $kodeRekening = $query->orderBy('kode')
+                                  ->paginate($this->perPage);
             
             return view('livewire.kode-rekening.index', [
-                'kodeRekening' => $kodeRekening
+                'kodeRekening' => $kodeRekening,
+                'levels' => [1, 2, 3, 4, 5, 6],
+                'perPageOptions' => $this->perPageOptions
             ]);
         }
     }

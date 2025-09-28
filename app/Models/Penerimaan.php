@@ -15,6 +15,8 @@ class Penerimaan extends Model
         'tanggal',
         'jumlah',
         'keterangan',
+        'skpd_id',      // TAMBAHAN
+        'created_by',   // TAMBAHAN
     ];
     
     protected $casts = [
@@ -25,6 +27,18 @@ class Penerimaan extends Model
     public function kodeRekening()
     {
         return $this->belongsTo(KodeRekening::class);
+    }
+    
+    // TAMBAHAN: Relasi ke SKPD
+    public function skpd()
+    {
+        return $this->belongsTo(Skpd::class, 'skpd_id');
+    }
+    
+    // TAMBAHAN: Relasi ke User (creator)
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
     
     // Hapus relasi ke tahunAnggaran karena tidak diperlukan lagi
@@ -88,5 +102,23 @@ class Penerimaan extends Model
     {
         return $query->whereDate('tanggal', '>=', $startDate)
                     ->whereDate('tanggal', '<=', $endDate);
+    }
+    
+    // TAMBAHAN: Scope untuk filter berdasarkan SKPD
+    public function scopeFilterBySkpd($query)
+    {
+        $user = auth()->user();
+        
+        if ($user->isSuperAdmin() || $user->isKepalaBadan()) {
+            // Super Admin dan Kepala Badan bisa lihat semua
+            return $query;
+        }
+        
+        if ($user->skpd_id) {
+            // Operator SKPD hanya lihat data SKPD sendiri
+            return $query->where('skpd_id', $user->skpd_id);
+        }
+        
+        return $query;
     }
 }

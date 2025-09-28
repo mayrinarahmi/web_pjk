@@ -275,7 +275,8 @@ class Index extends Component
                         return TargetAnggaran::getTargetAnggaran($child->id, $this->tahunAnggaranId);
                     });
                 
-                $kr->is_consistent = ($kr->level >= 4) || (abs($childrenSum - $kr->manual_target) <= 1);
+                // Update konsistensi check untuk level 6
+                $kr->is_consistent = ($kr->level >= 5) || (abs($childrenSum - $kr->manual_target) <= 1);
             }
         }
         

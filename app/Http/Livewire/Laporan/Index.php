@@ -3,6 +3,7 @@
 namespace App\Http\Livewire\Laporan;
 
 use Livewire\Component;
+use Livewire\WithPagination;
 use App\Models\Penerimaan;
 use App\Models\KodeRekening;
 use App\Models\TahunAnggaran;
@@ -17,50 +18,82 @@ use Illuminate\Support\Facades\DB;
 
 class Index extends Component
 {
+    use WithPagination;
+    
+    protected $paginationTheme = 'bootstrap';
+    
     public $tahunAnggaranId;
     public $tanggalMulai;
     public $tanggalSelesai;
     public $tipeFilter = 'custom';
     public $tahunAnggaran = [];
-    public $persentaseTarget = 40; // Nilai default yang akan diganti dengan nilai dinamis
-    public $viewMode = 'cumulative'; // Mode tampilan: 'specific' atau 'cumulative'
+    public $persentaseTarget = 40;
+    public $viewMode = 'cumulative';
+    
+    // Pagination properties
+    public $perPage = 50;
+    public $perPageOptions = [25, 50, 100, 200, 500];
+    
+    // Cache untuk data keseluruhan (untuk export)
+    private $allData = null;
+    
+    protected $queryString = [
+        'perPage' => ['except' => 50],
+        'tahunAnggaranId' => ['except' => ''],
+        'viewMode' => ['except' => 'cumulative'],
+        'tipeFilter' => ['except' => 'custom'],
+    ];
     
     public function mount()
     {
         $this->tahunAnggaran = TahunAnggaran::orderBy('tahun', 'desc')->get();
-         $activeTahun = TahunAnggaran::getActive();
+        $activeTahun = TahunAnggaran::getActive();
         $this->tahunAnggaranId = $activeTahun ? $activeTahun->id : null;
         
-        // Default tanggal (bulan ini)
         $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
         $this->tanggalSelesai = Carbon::now()->format('Y-m-d');
         
-        // Set persentase target berdasarkan bulan saat ini
         if ($this->tahunAnggaranId) {
             $bulanAkhir = Carbon::now()->month;
             $this->persentaseTarget = $this->getTargetPersentase($bulanAkhir);
         }
     }
     
-    // Tambahkan metode untuk mengubah mode tampilan
+    public function updatedPerPage()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedTahunAnggaranId()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedTanggalMulai()
+    {
+        $this->resetPage();
+    }
+    
+    public function updatedTanggalSelesai()
+    {
+        $this->resetPage();
+    }
+    
     public function setViewMode($mode)
     {
         $this->viewMode = $mode;
+        $this->resetPage();
         
-        // Jika mode diubah, sesuaikan tanggal mulai berdasarkan mode dan filter yang aktif
         if (in_array($this->tipeFilter, ['triwulan1', 'triwulan2', 'triwulan3', 'triwulan4'])) {
             $this->updateDateRangeBasedOnFilter();
         }
     }
     
-    // Metode bantu untuk mendapatkan persentase target - DIPERBAIKI
     private function getTargetPersentase($bulanAkhir)
     {
-        // Jika mode kumulatif, gunakan persentase kumulatif
         if ($this->viewMode === 'cumulative') {
             return TargetPeriode::getPersentaseKumulatif($this->tahunAnggaranId, $bulanAkhir);
         } else {
-            // Mode specific: gunakan persentase periode saja
             return TargetPeriode::getPersentaseForBulan($this->tahunAnggaranId, $bulanAkhir);
         }
     }
@@ -70,45 +103,41 @@ class Index extends Component
         $this->tipeFilter = $tipeFilter;
         $this->tanggalMulai = $tanggalMulai;
         $this->tanggalSelesai = $tanggalSelesai;
+        $this->resetPage();
     }
     
-    // Update metode setFilter untuk mendukung dual mode
     public function setFilter($tipe)
     {
         $this->tipeFilter = $tipe;
         $this->updateDateRangeBasedOnFilter();
+        $this->resetPage();
     }
     
-    // Metode baru untuk update rentang tanggal berdasarkan filter dan mode - DIPERBAIKI
     private function updateDateRangeBasedOnFilter()
     {
         $tahunSekarang = Carbon::now()->year;
         
         switch ($this->tipeFilter) {
             case 'mingguan':
-                // Filter untuk minggu ini
                 $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
                 $this->tanggalSelesai = Carbon::now()->endOfWeek()->format('Y-m-d');
                 break;
                 
             case 'minggu_lalu':
-                // Filter untuk minggu lalu
                 $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
                 $this->tanggalSelesai = Carbon::now()->subWeek()->endOfWeek()->format('Y-m-d');
                 break;
                 
             case 'bulanan':
-                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d'); // Selalu dari awal tahun
+                $this->tanggalMulai = Carbon::now()->startOfYear()->format('Y-m-d');
                 $this->tanggalSelesai = Carbon::now()->endOfMonth()->format('Y-m-d');
                 break;
                 
             case 'triwulan1':
-                // Mode spesifik: hanya bulan dalam triwulan
                 if ($this->viewMode === 'specific') {
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 3, 31)->format('Y-m-d');
                 } else {
-                    // Mode kumulatif: dari awal tahun
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 3, 31)->format('Y-m-d');
                 }
@@ -116,11 +145,9 @@ class Index extends Component
                 
             case 'triwulan2':
                 if ($this->viewMode === 'specific') {
-                    // Mode spesifik: hanya Apr-Jun
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 4, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 6, 30)->format('Y-m-d');
                 } else {
-                    // Mode kumulatif: Jan-Jun
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 6, 30)->format('Y-m-d');
                 }
@@ -128,11 +155,9 @@ class Index extends Component
                 
             case 'triwulan3':
                 if ($this->viewMode === 'specific') {
-                    // Mode spesifik: hanya Jul-Sep
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 7, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 9, 30)->format('Y-m-d');
                 } else {
-                    // Mode kumulatif: Jan-Sep
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 9, 30)->format('Y-m-d');
                 }
@@ -140,11 +165,9 @@ class Index extends Component
                 
             case 'triwulan4':
                 if ($this->viewMode === 'specific') {
-                    // Mode spesifik: hanya Oct-Dec
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 10, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 12, 31)->format('Y-m-d');
                 } else {
-                    // Mode kumulatif: Jan-Dec
                     $this->tanggalMulai = Carbon::createFromDate($tahunSekarang, 1, 1)->format('Y-m-d');
                     $this->tanggalSelesai = Carbon::createFromDate($tahunSekarang, 12, 31)->format('Y-m-d');
                 }
@@ -156,23 +179,20 @@ class Index extends Component
                 break;
         }
         
-        // Update persentase target berdasarkan mode dan tanggal selesai
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         $this->persentaseTarget = $this->getTargetPersentase($bulanAkhir);
     }
     
     public function exportPdf()
     {
-        $data = $this->getLaporanData();
+        $data = $this->getAllLaporanData(); // Gunakan method untuk semua data
         $tahunAnggaran = TahunAnggaran::find($this->tahunAnggaranId);
         
-        // Pastikan ada data sebelum mencoba membuat PDF
         if (empty($data)) {
             session()->flash('error', 'Tidak ada data untuk diekspor');
             return;
         }
         
-        // Tambahkan variabel $bulanAkhir untuk konsistensi dengan template
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         $bulanAwal = Carbon::parse($this->tanggalMulai)->month;
         
@@ -187,7 +207,6 @@ class Index extends Component
             'viewMode' => $this->viewMode
         ]);
         
-        // Atur orientasi PDF ke landscape agar semua kolom bulan muat
         $pdf->setPaper('a4', 'landscape');
         
         return response()->streamDownload(function () use ($pdf) {
@@ -197,10 +216,9 @@ class Index extends Component
     
     public function exportExcel()
     {
-        $data = $this->getLaporanData();
+        $data = $this->getAllLaporanData(); // Gunakan method untuk semua data
         $tahunAnggaran = TahunAnggaran::find($this->tahunAnggaranId);
         
-        // Pastikan ada data sebelum mencoba membuat Excel
         if (empty($data)) {
             session()->flash('error', 'Tidak ada data untuk diekspor');
             return;
@@ -219,42 +237,44 @@ class Index extends Component
         ), 'laporan-penerimaan-' . date('Y-m-d') . '.xlsx');
     }
     
-    private function getLaporanData()
+    // Method baru untuk mendapatkan semua data (untuk export)
+    private function getAllLaporanData()
+    {
+        if ($this->allData === null) {
+            $this->allData = $this->getLaporanData(false); // false = tanpa pagination
+        }
+        return $this->allData;
+    }
+    
+    private function getLaporanData($paginate = true)
     {
         if (!$this->tahunAnggaranId) {
-            return [];
+            return $paginate ? collect() : [];
         }
         
         $tahunAnggaran = TahunAnggaran::find($this->tahunAnggaranId);
         $tahun = $tahunAnggaran->tahun;
         
-        // Tentukan bulan yang sedang dilaporkan
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         $bulanAwal = Carbon::parse($this->tanggalMulai)->month;
 
-        // Ambil persentase target berdasarkan mode dan tipe filter - DIPERBAIKI
         if (strpos($this->tipeFilter, 'minggu') !== false) {
             $persentaseTarget = TargetPeriode::getPersentaseForWeek($this->tahunAnggaranId, $this->tanggalSelesai);
         } else {
-            // Gunakan method getTargetPersentase yang sudah diperbaiki
             $persentaseTarget = $this->getTargetPersentase($bulanAkhir);
         }
 
         $this->persentaseTarget = round($persentaseTarget, 2);
         
-        // Ambil semua kode rekening dan kelompokkan berdasarkan level
         $kodeRekening = KodeRekening::orderBy('kode')->get();
         $kodeByLevel = [];
         foreach ($kodeRekening as $kode) {
             $kodeByLevel[$kode->level][] = $kode;
         }
         
-        // Siapkan data untuk semua kode rekening
         $dataPerKode = [];
         
-        // Langkah 1: Inisialisasi semua data kode rekening
         foreach ($kodeRekening as $kode) {
-            // Siapkan array penerimaan per bulan
             $penerimaanPerBulan = [];
             for ($i = 1; $i <= 12; $i++) {
                 $penerimaanPerBulan[$i] = 0;
@@ -272,10 +292,9 @@ class Index extends Component
             ];
         }
         
-        // Langkah 2: Hitung nilai untuk level terbawah (level 5)
-        if (isset($kodeByLevel[5])) {
-            foreach ($kodeByLevel[5] as $kode) {
-                // Ambil target anggaran
+        // Process level 6 data
+        if (isset($kodeByLevel[6])) {
+            foreach ($kodeByLevel[6] as $kode) {
                 $targetData = TargetAnggaran::where('kode_rekening_id', $kode->id)
                     ->where('tahun_anggaran_id', $this->tahunAnggaranId)
                     ->first();
@@ -284,8 +303,6 @@ class Index extends Component
                     $dataPerKode[$kode->id]['target_anggaran'] = $targetData->jumlah;
                 }
                 
-                // PERUBAHAN UTAMA: Ambil nilai terakhir per bulan untuk sistem kumulatif
-                // Query untuk mendapatkan penerimaan terakhir per bulan
                 $penerimaanPerBulanQuery = Penerimaan::select(
                         DB::raw('MONTH(tanggal) as bulan'),
                         DB::raw('MAX(tanggal) as tanggal_terakhir')
@@ -293,21 +310,21 @@ class Index extends Component
                     ->where('kode_rekening_id', $kode->id)
                     ->where('tahun', $tahun)
                     ->whereDate('tanggal', '<=', $this->tanggalSelesai)
+                    ->filterBySkpd()
                     ->groupBy('bulan');
                 
-                // Jika mode specific, batasi juga tanggal mulai
                 if ($this->viewMode === 'specific') {
                     $penerimaanPerBulanQuery->whereDate('tanggal', '>=', $this->tanggalMulai);
                 }
                 
                 $tanggalTerakhirPerBulan = $penerimaanPerBulanQuery->get();
                 
-                // Ambil nilai penerimaan untuk setiap tanggal terakhir per bulan
                 foreach ($tanggalTerakhirPerBulan as $item) {
                     $penerimaan = Penerimaan::where('kode_rekening_id', $kode->id)
                         ->where('tahun', $tahun)
                         ->whereDate('tanggal', $item->tanggal_terakhir)
-                        ->orderBy('id', 'desc') // Jika ada multiple entry di tanggal yang sama, ambil yang terakhir
+                        ->filterBySkpd()
+                        ->orderBy('id', 'desc')
                         ->first();
                     
                     if ($penerimaan) {
@@ -316,13 +333,11 @@ class Index extends Component
                     }
                 }
                 
-                // Hitung realisasi sampai dengan bulan ini
-                // Untuk mode kumulatif, ambil nilai terakhir yang ada
                 if ($this->viewMode === 'cumulative') {
-                    // Cari penerimaan terakhir sampai dengan tanggal selesai
                     $penerimaanTerakhir = Penerimaan::where('kode_rekening_id', $kode->id)
                         ->where('tahun', $tahun)
                         ->whereDate('tanggal', '<=', $this->tanggalSelesai)
+                        ->filterBySkpd()
                         ->orderBy('tanggal', 'desc')
                         ->orderBy('id', 'desc')
                         ->first();
@@ -331,7 +346,6 @@ class Index extends Component
                         $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] = $penerimaanTerakhir->jumlah;
                     }
                 } else {
-                    // Mode specific: jumlahkan nilai per bulan dalam rentang
                     $totalRealisasi = 0;
                     for ($i = $bulanAwal; $i <= $bulanAkhir; $i++) {
                         $totalRealisasi += $dataPerKode[$kode->id]['penerimaan_per_bulan'][$i];
@@ -341,24 +355,18 @@ class Index extends Component
             }
         }
         
-        // Langkah 3: Agregasi dari bawah ke atas (level 5 -> 4 -> 3 -> 2 -> 1)
-        for ($level = 4; $level >= 1; $level--) {
+        // Aggregate from level 5 up
+        for ($level = 5; $level >= 1; $level--) {
             if (isset($kodeByLevel[$level])) {
                 foreach ($kodeByLevel[$level] as $kode) {
-                    // Cari semua anak langsung
                     $children = $kodeRekening->where('parent_id', $kode->id);
                     
-                    // Hitung total dari anak-anak
                     foreach ($children as $child) {
                         $childData = $dataPerKode[$child->id];
                         
-                        // Tambahkan target anggaran
                         $dataPerKode[$kode->id]['target_anggaran'] += $childData['target_anggaran'];
-                        
-                        // Tambahkan realisasi
                         $dataPerKode[$kode->id]['realisasi_sd_bulan_ini'] += $childData['realisasi_sd_bulan_ini'];
                         
-                        // Untuk penerimaan per bulan, jumlahkan dari children
                         for ($i = 1; $i <= 12; $i++) {
                             $dataPerKode[$kode->id]['penerimaan_per_bulan'][$i] += $childData['penerimaan_per_bulan'][$i];
                         }
@@ -367,7 +375,7 @@ class Index extends Component
             }
         }
         
-        // Langkah 4: Format data untuk output
+        // Format data
         $dataLaporan = [];
         
         foreach ($kodeRekening as $kode) {
@@ -375,18 +383,14 @@ class Index extends Component
             $targetAnggaran = $data['target_anggaran'];
             $realisasiSdBulanIni = $data['realisasi_sd_bulan_ini'];
             
-            // Hitung target sampai dengan bulan ini
             $targetSdBulanIni = $targetAnggaran * ($this->persentaseTarget / 100);
             
-            // PERBAIKAN: Hitung lebih/kurang dari target (nilai positif = kurang dari target)
-            // Jika pagu anggaran 0 atau negatif, maka kurang dari target juga 0
             if ($targetAnggaran <= 0) {
                 $lebihKurang = 0;
             } else {
                 $lebihKurang = $targetSdBulanIni - $realisasiSdBulanIni;
             }
             
-            // Hitung persentase realisasi
             $persentase = 0;
             if ($targetAnggaran > 0) {
                 $persentase = ($realisasiSdBulanIni / $targetAnggaran) * 100;
@@ -407,24 +411,52 @@ class Index extends Component
             ];
         }
         
-        // Urutkan data laporan berdasarkan kode rekening
+        // Filter empty rows
+        $dataLaporan = array_filter($dataLaporan, function($item) {
+            return !($item['target_anggaran'] == 0 && $item['realisasi_sd_bulan_ini'] == 0);
+        });
+        
+        // Sort by kode
         usort($dataLaporan, function($a, $b) {
             return $a['kode'] <=> $b['kode'];
         });
+        
+        // Return paginated atau full data
+        if ($paginate) {
+            return collect($dataLaporan);
+        }
         
         return $dataLaporan;
     }
     
     public function render()
     {
-        $data = $this->getLaporanData();
+        $dataCollection = $this->getLaporanData(true);
+        
+        // Paginate the collection
+        $currentPage = $this->getPage() ?? 1;
+        $perPage = $this->perPage;
+        
+        $paginatedData = $dataCollection->forPage($currentPage, $perPage);
+        
+        $data = new \Illuminate\Pagination\LengthAwarePaginator(
+            $paginatedData,
+            $dataCollection->count(),
+            $perPage,
+            $currentPage,
+            ['path' => request()->url()]
+        );
+        
+        $data->withPath('');
+        
         $bulanAwal = Carbon::parse($this->tanggalMulai)->month;
         $bulanAkhir = Carbon::parse($this->tanggalSelesai)->month;
         
         return view('livewire.laporan.index', [
             'data' => $data,
             'bulanAwal' => $bulanAwal,
-            'bulanAkhir' => $bulanAkhir
+            'bulanAkhir' => $bulanAkhir,
+            'perPageOptions' => $this->perPageOptions,
         ]);
     }
 }
