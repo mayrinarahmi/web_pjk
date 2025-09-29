@@ -321,28 +321,59 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
     }
 
     public function registerEvents(): array
-    {
-        return [
-            AfterSheet::class => function(AfterSheet $event) {
-                $sheet = $event->sheet->getDelegate();
+{
+    return [
+        AfterSheet::class => function(AfterSheet $event) {
+            $sheet = $event->sheet->getDelegate();
+            
+            // Process each data row
+            foreach ($this->data as $index => $row) {
+                $rowNumber = $index + 9; // Starting from row 9
                 
-                // Bold untuk level 1 dan 2
-                foreach ($this->data as $index => $row) {
-                    $rowNumber = $index + 9; // Starting from row 9
+                if ($row['level'] <= 2) {
+                    // Bold untuk level 1 dan 2
+                    $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
+                        ->getFont()->setBold(true);
                     
-                    if ($row['level'] <= 2) {
-                        $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
-                            ->getFont()->setBold(true);
-                    }
-                    
-                    if ($row['level'] == 1) {
-                        $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
-                            ->getFill()
-                            ->setFillType(Fill::FILL_SOLID)
-                            ->getStartColor()->setRGB('E8F4F8');
-                    }
+                    // PERBAIKAN: Set alignment untuk kolom URAIAN (kolom B) ke kiri
+                    $sheet->getStyle('B' . $rowNumber)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_LEFT);
                 }
+                
+                if ($row['level'] == 1) {
+                    // Background untuk level 1
+                    $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
+                        ->getFill()
+                        ->setFillType(Fill::FILL_SOLID)
+                        ->getStartColor()->setRGB('E8F4F8');
+                }
+                
+                // TAMBAHAN: Set alignment untuk semua level di kolom B (URAIAN)
+                $sheet->getStyle('B' . $rowNumber)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                
+                // Set alignment untuk kolom KODE (A) - rata kiri juga
+                $sheet->getStyle('A' . $rowNumber)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                
+                // Set alignment untuk kolom angka (C, D, F) - rata kanan
+                $sheet->getStyle('C' . $rowNumber . ':D' . $rowNumber)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    
+                $sheet->getStyle('F' . $rowNumber)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    
+                // Set alignment untuk kolom persentase (E) - rata tengah
+                $sheet->getStyle('E' . $rowNumber)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
             }
-        ];
-    }
+        }
+    ];
+}
 }
