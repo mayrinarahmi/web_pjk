@@ -100,7 +100,7 @@
 
         <!-- Laporan - Semua user bisa akses -->
         @can('view-laporan')
-        <li class="menu-header small text-uppercase">
+        <!-- <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Laporan</span>
         </li>
         
@@ -109,7 +109,7 @@
                 <i class="menu-icon tf-icons bx bx-file"></i>
                 <div>Laporan Realisasi</div>
             </a>
-        </li>
+        </li> -->
         @endcan
     
 

@@ -7,7 +7,7 @@
             <img src="{{ asset('images/logo.png') }}" alt="Logo BKPAD Banjarmasin" class="pkpad-logo" style="width: 300px; height: auto; max-width: 100%; margin-bottom: 10px;">
         </div>
         
-        <h1 class="login-title text-center mb-4" style="font-size: 1.2rem; color: #6c757d; font-weight: 500;">(Sistem Informasi Laporan Pendapatan Automatis Terpadu)</h1>
+        <h1 class="login-title text-center mb-4" style="font-size: 1.2rem; color: #6c757d; font-weight: 500;">(Sistem Informasi Laporan Pendapatan Terpadu)</h1>
         
         <div class="card auth-card">
             <div class="card-body p-4">
