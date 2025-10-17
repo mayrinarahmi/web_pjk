@@ -41,27 +41,67 @@
         
 
         <div class="card-body">
-            <!-- TAMBAHAN: SKPD Info dan Filter -->
+          
             @if($userSkpdInfo)
             <div class="alert {{ auth()->user()->skpd_id && !auth()->user()->isSuperAdmin() ? 'alert-warning' : 'alert-info' }} py-2">
                 <i class="bx bx-info-circle"></i> {{ $userSkpdInfo }}
             </div>
             @endif
             
-            <!-- Filter Section -->
-            <div class="row mb-3">
-                <!-- TAMBAHAN: SKPD Filter untuk Super Admin/Kepala Badan -->
-                @if((auth()->user()->isSuperAdmin() || auth()->user()->isKepalaBadan()) && count($skpdList) > 0)
-                <div class="col-md-3">
-                    <label for="selectedSkpdId" class="form-label">Filter SKPD</label>
-                    <select class="form-select form-select-sm" wire:model.live="selectedSkpdId">
-                        <option value="">Semua SKPD</option>
-                        @foreach($skpdList as $skpd)
-                            <option value="{{ $skpd->id }}">{{ $skpd->nama_opd }}</option>
-                        @endforeach
-                    </select>
-                </div>
+            <!-- ================================================ -->
+<!-- USER INFO BADGE -->
+<!-- ================================================ -->
+<div class="row mb-3">
+    <!-- <div class="col-12"> -->
+        <!-- <div class="alert alert-info mb-0 d-flex align-items-center" role="alert"> -->
+            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+            <div class="flex-grow-1">
+                <!-- <strong>{{ $userSkpdInfo }}</strong> -->
+                
+                @if(!auth()->user()->canViewAllSkpd() && auth()->user()->skpd)
+                    <br>
+                    <small class="text-muted">
+                        Anda dapat mengakses 
+                        <strong class="text-primary">{{ $kodeRekeningLevel6->count() }} kode rekening</strong> 
+                        yang telah di-assign ke SKPD Anda
+                    </small>
                 @endif
+            <!-- </div> -->
+        <!-- </div> -->
+    </div>
+</div>
+
+<!-- ================================================ -->
+<!-- FILTER SECTION -->
+<!-- ================================================ -->
+<div class="row mb-3">
+    <!-- FILTER SKPD -->
+    <div class="col-md-3">
+        <label class="form-label fw-bold">
+            <i class="bi bi-building"></i> FILTER SKPD
+        </label>
+        
+        @if(auth()->user()->canViewAllSkpd())
+            {{-- SUPER ADMIN & KEPALA BADAN - ADA DROPDOWN --}}
+            <select wire:model.live="selectedSkpdId" class="form-select">
+                <option value="">Semua SKPD</option>
+                @foreach($skpdList as $skpd)
+                    <option value="{{ $skpd->id }}">{{ $skpd->nama_opd }}</option>
+                @endforeach
+            </select>
+            <small class="text-muted">Pilih SKPD untuk filter data</small>
+        @else
+            {{-- OPERATOR SKPD - READONLY FIELD --}}
+            <input type="text" 
+                   class="form-control bg-light" 
+                   value="{{ auth()->user()->skpd ? auth()->user()->skpd->nama_opd : 'Tidak ada SKPD' }}" 
+                   readonly 
+                   disabled>
+            <small class="text-muted">
+                <i class="bi bi-lock-fill"></i> Anda hanya dapat melihat data SKPD Anda
+            </small>
+        @endif
+    </div>
                 
                 <div class="col-md-2">
                     <label for="tahun" class="form-label">Tahun</label>

@@ -56,6 +56,20 @@
                         @enderror
                     </div>
                     
+                    {{-- ============================================ --}}
+                    {{-- CLOUDFLARE TURNSTILE CAPTCHA --}}
+                    {{-- ============================================ --}}
+                    <div class="mb-3">
+                        <div class="cf-turnstile" 
+                             data-sitekey="{{ env('TURNSTILE_SITE_KEY') }}"
+                             data-theme="light"
+                             data-size="normal">
+                        </div>
+                        @error('captcha')
+                            <small class="text-danger d-block mt-1">{{ $message }}</small>
+                        @enderror
+                    </div>
+                    
                     <div class="mb-3">
                         <button type="submit" class="btn-login w-100">Login</button>
                     </div>
@@ -133,6 +147,12 @@
     margin-bottom: 0.5rem;
 }
 
+/* Turnstile widget styling */
+.cf-turnstile {
+    display: flex;
+    justify-content: center;
+}
+
 /* Responsive adjustments */
 @media (max-width: 576px) {
     .pkpad-logo {
@@ -144,6 +164,10 @@
     }
 }
 </style>
+
+{{-- Turnstile Script --}}
+@push('scripts')
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
 <script>
     // Toggle password visibility
@@ -175,4 +199,5 @@
         }
     });
 </script>
+@endpush
 @endsection

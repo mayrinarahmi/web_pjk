@@ -12,7 +12,7 @@ use Livewire\WithFileUploads;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use App\Imports\PenerimaanImport;
-use App\Exports\LaporanRealisasiExport;  // TAMBAHAN IMPORT
+use App\Exports\LaporanRealisasiExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
@@ -81,59 +81,25 @@ class Index extends Component
         'perPage' => ['except' => 50],
     ];
 
+    // ==========================================
+    // LIFECYCLE METHODS
+    // ==========================================
+    
     public function mount()
     {
         $this->hideEmpty = true;
         
         $user = auth()->user();
         
-        if ($user->hasRole(['Super Admin', 'Administrator'])) {
-            $this->skpdList = Skpd::where('status', 'aktif')
-                                  ->orderBy('nama_opd')
-                                  ->get();
-            $this->userSkpdInfo = 'Super Admin - Semua SKPD';
-            
-            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
-                                                    ->where('is_active', true)
-                                                    ->orderBy('kode')
-                                                    ->get();
-                                                    
-        } elseif ($user->hasRole('Kepala Badan')) {
-            $this->skpdList = Skpd::where('status', 'aktif')
-                                  ->orderBy('nama_opd')
-                                  ->get();
-            $this->userSkpdInfo = 'Kepala BPKPAD - Semua SKPD';
-            
-            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
-                                                    ->where('is_active', true)
-                                                    ->orderBy('kode')
-                                                    ->get();
-                                                    
-        } elseif ($user->skpd) {
-            $this->selectedSkpdId = $user->skpd_id;
-            $this->userSkpdInfo = 'SKPD: ' . $user->skpd->nama_opd;
-            
-            $skpdAccess = $user->skpd->kode_rekening_access ?? [];
-            
-            if (!empty($skpdAccess)) {
-                $this->kodeRekeningLevel6 = KodeRekening::whereIn('id', $skpdAccess)
-                                                        ->where('level', 6)
-                                                        ->where('is_active', true)
-                                                        ->orderBy('kode')
-                                                        ->get();
-            } else {
-                $this->kodeRekeningLevel6 = collect([]);
-                session()->flash('warning', 'SKPD Anda belum memiliki kode rekening yang di-assign.');
-            }
-        } else {
-            $this->kodeRekeningLevel6 = collect([]);
-            session()->flash('error', 'Anda tidak terdaftar di SKPD manapun.');
-        }
+        // Initialize berdasarkan role user
+        $this->initializeUserContext($user);
         
+        // Set tahun aktif
         $activeTahun = TahunAnggaran::getActive();
         $this->tahun = $activeTahun ? $activeTahun->tahun : Carbon::now()->year;
         $this->importTahun = $this->tahun;
         
+        // Load available years
         $this->availableYears = TahunAnggaran::distinct()
                                            ->orderBy('tahun', 'desc')
                                            ->pluck('tahun')
@@ -142,6 +108,51 @@ class Index extends Component
         $this->setTanggalByTahun();
     }
     
+    /**
+     * Initialize user context berdasarkan role
+     * Set SKPD list dan kode rekening access
+     */
+    private function initializeUserContext($user)
+    {
+        if ($user->canViewAllSkpd()) {
+            // Super Admin atau Kepala Badan - bisa lihat semua SKPD
+            $this->skpdList = Skpd::where('status', 'aktif')
+                                  ->orderBy('nama_opd')
+                                  ->get();
+            
+            $roleName = $user->isSuperAdmin() ? 'Super Admin' : 'Kepala BPKPAD';
+            $this->userSkpdInfo = $roleName . ' - Semua SKPD';
+            
+            // Load semua kode rekening level 6
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
+                                                    
+        } elseif ($user->skpd_id && $user->skpd) {
+            // Operator SKPD - hanya SKPD sendiri
+            $this->selectedSkpdId = $user->skpd_id;
+            $this->userSkpdInfo = 'SKPD: ' . $user->skpd->nama_opd;
+            
+            // Load kode rekening yang di-assign ke SKPD
+            $this->kodeRekeningLevel6 = $user->getAccessibleLevel6KodeRekening();
+            
+            // Warning jika belum ada assignment
+            if ($this->kodeRekeningLevel6->isEmpty()) {
+                session()->flash('warning', 'SKPD Anda belum memiliki kode rekening yang di-assign. Silakan hubungi administrator.');
+            }
+            
+        } else {
+            // User tanpa SKPD - tidak ada akses
+            $this->kodeRekeningLevel6 = collect([]);
+            $this->userSkpdInfo = 'Tidak terdaftar di SKPD';
+            session()->flash('error', 'Anda tidak terdaftar di SKPD manapun. Silakan hubungi administrator.');
+        }
+    }
+    
+    /**
+     * Set tanggal mulai dan selesai berdasarkan tahun
+     */
     private function setTanggalByTahun()
     {
         if ($this->tahun) {
@@ -153,94 +164,9 @@ class Index extends Component
         }
     }
 
-   /**
-     * Export Laporan Realisasi Anggaran
-     */
-    public function exportLaporanRealisasi()
-    {
-        try {
-            // Validasi dan ambil parameter
-            $tahun = $this->tahun;
-            $tanggalAwal = $this->tanggalMulai;
-            $tanggalAkhir = $this->tanggalSelesai;
-            
-            // Validasi tahun harus ada
-            if (!$tahun) {
-                session()->flash('error', 'Silakan pilih tahun terlebih dahulu untuk export LRA');
-                return;
-            }
-            
-            // Set default tanggal jika kosong
-            $tanggalAwal = $tanggalAwal ?: "{$tahun}-01-01";
-            $tanggalAkhir = $tanggalAkhir ?: "{$tahun}-12-31";
-            
-            // Generate filename
-            $filename = 'LRA_' . $tahun;
-            
-            // Determine SKPD for filter and filename
-            $skpdId = null;
-            $user = auth()->user();
-            
-            // Check user role and SKPD
-            if ($user->skpd_id && !$user->hasRole(['Super Admin', 'Administrator'])) {
-                // Operator SKPD - use their SKPD
-                $skpdId = $user->skpd_id;
-                if ($user->skpd && $user->skpd->kode_opd) {
-                    $filename .= '_' . str_replace([' ', '/'], '_', $user->skpd->kode_opd);
-                }
-            } elseif ($this->selectedSkpdId) {
-                // Admin with selected SKPD filter
-                $skpdId = $this->selectedSkpdId;
-                $skpd = Skpd::find($this->selectedSkpdId);
-                if ($skpd && $skpd->kode_opd) {
-                    $filename .= '_' . str_replace([' ', '/'], '_', $skpd->kode_opd);
-                }
-            } else {
-                // All SKPD
-                $filename .= '_KONSOLIDASI';
-            }
-            
-            // Add timestamp
-            $filename .= '_' . date('YmdHis') . '.xlsx';
-            
-            // Log export action
-            Log::info('Export LRA', [
-                'user' => $user->name,
-                'tahun' => $tahun,
-                'tanggal_awal' => $tanggalAwal,
-                'tanggal_akhir' => $tanggalAkhir,
-                'skpd_id' => $skpdId,
-                'filename' => $filename
-            ]);
-            
-            // Download file
-            return Excel::download(
-                new LaporanRealisasiExport($tahun, $tanggalAwal, $tanggalAkhir, $skpdId),
-                $filename
-            );
-            
-        } catch (\Exception $e) {
-            Log::error('Export LRA Error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            session()->flash('error', 'Gagal export laporan: ' . $e->getMessage());
-            return redirect()->back();
-        }
-    }
-
-    public function toggleLevel($level)
-    {
-        $property = "showLevel$level";
-        $this->$property = !$this->$property;
-        $this->resetPage();
-    }
-    
-    public function toggleHideEmpty()
-    {
-        $this->hideEmpty = !$this->hideEmpty;
-        $this->resetPage();
-    }
+    // ==========================================
+    // EVENT HANDLERS - UPDATERS
+    // ==========================================
     
     public function updatedPerPage()
     {
@@ -268,38 +194,50 @@ class Index extends Component
         $this->resetPage();
     }
     
+    /**
+     * Handler ketika user memilih SKPD dari dropdown
+     * CRITICAL METHOD untuk dynamic filter
+     */
     public function updatedSelectedSkpdId()
     {
         $this->resetPage();
         
         $user = auth()->user();
         
-        if ($user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
-            if ($this->selectedSkpdId) {
-                $selectedSkpd = Skpd::find($this->selectedSkpdId);
-                
-                if ($selectedSkpd) {
-                    $skpdAccess = $selectedSkpd->kode_rekening_access ?? [];
-                    
-                    if (!empty($skpdAccess)) {
-                        $this->kodeRekeningLevel6 = KodeRekening::whereIn('id', $skpdAccess)
-                                                                ->where('level', 6)
-                                                                ->where('is_active', true)
-                                                                ->orderBy('kode')
-                                                                ->get();
-                    } else {
-                        $this->kodeRekeningLevel6 = collect([]);
-                        session()->flash('info', 'SKPD ' . $selectedSkpd->nama_opd . ' belum memiliki kode rekening yang di-assign.');
-                    }
-                }
-            } else {
-                $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
-                                                        ->where('is_active', true)
-                                                        ->orderBy('kode')
-                                                        ->get();
-            }
+        // Hanya Super Admin dan Kepala Badan yang bisa ganti SKPD
+        if (!$user->canViewAllSkpd()) {
+            return;
+        }
+        
+        // Reset kode rekening filter
+        $this->kodeRekeningId = null;
+        
+        if ($this->selectedSkpdId) {
+            // Ada SKPD yang dipilih - load kode rekening SKPD tersebut
+            $selectedSkpd = Skpd::find($this->selectedSkpdId);
             
-            $this->kodeRekeningId = null;
+            if ($selectedSkpd) {
+                $skpdAccess = $selectedSkpd->kode_rekening_access ?? [];
+                
+                if (!empty($skpdAccess)) {
+                    // Load kode rekening level 6 yang di-assign
+                    $this->kodeRekeningLevel6 = KodeRekening::whereIn('id', $skpdAccess)
+                                                            ->where('level', 6)
+                                                            ->where('is_active', true)
+                                                            ->orderBy('kode')
+                                                            ->get();
+                } else {
+                    // SKPD belum ada assignment
+                    $this->kodeRekeningLevel6 = collect([]);
+                    session()->flash('info', 'SKPD ' . $selectedSkpd->nama_opd . ' belum memiliki kode rekening yang di-assign.');
+                }
+            }
+        } else {
+            // "Semua SKPD" dipilih - load semua kode rekening
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
         }
     }
     
@@ -308,20 +246,51 @@ class Index extends Component
         $this->resetPage();
     }
     
+    // ==========================================
+    // TOGGLE METHODS
+    // ==========================================
+    
+    public function toggleLevel($level)
+    {
+        $property = "showLevel$level";
+        $this->$property = !$this->$property;
+        $this->resetPage();
+    }
+    
+    public function toggleHideEmpty()
+    {
+        $this->hideEmpty = !$this->hideEmpty;
+        $this->resetPage();
+    }
+    
+    // ==========================================
+    // RESET METHODS
+    // ==========================================
+    
     public function resetFilter()
     {
         $this->search = '';
         $this->kodeRekeningId = null;
         
         $user = auth()->user();
-        if ($user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+        
+        // Reset SKPD filter hanya untuk admin
+        if ($user->canViewAllSkpd()) {
             $this->selectedSkpdId = '';
+            
+            // Load semua kode rekening
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
         }
         
+        // Reset tahun ke aktif
         $activeTahun = TahunAnggaran::getActive();
         $this->tahun = $activeTahun ? $activeTahun->tahun : Carbon::now()->year;
         $this->setTanggalByTahun();
         
+        // Reset level visibility
         $this->showLevel1 = true;
         $this->showLevel2 = true;
         $this->showLevel3 = true;
@@ -332,6 +301,8 @@ class Index extends Component
         $this->hideEmpty = true;
         
         $this->resetPage();
+        
+        session()->flash('message', 'Filter berhasil direset.');
     }
     
     public function resetTanggalToFullYear()
@@ -345,32 +316,113 @@ class Index extends Component
         }
     }
 
-public function delete($id)
+    // ==========================================
+    // EXPORT METHOD
+    // ==========================================
+    
+    /**
+     * Export Laporan Realisasi Anggaran
+     */
+    public function exportLaporanRealisasi()
     {
-        $penerimaan = Penerimaan::find($id);
-        if ($penerimaan) {
-            $user = auth()->user();
-            if (!$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan']) && 
-                $penerimaan->skpd_id != $user->skpd_id) {
-                session()->flash('error', 'Anda tidak memiliki akses untuk menghapus data ini.');
+        try {
+            $tahun = $this->tahun;
+            $tanggalAwal = $this->tanggalMulai;
+            $tanggalAkhir = $this->tanggalSelesai;
+            
+            if (!$tahun) {
+                session()->flash('error', 'Silakan pilih tahun terlebih dahulu untuk export LRA');
                 return;
             }
             
-            $penerimaan->delete();
-            session()->flash('message', 'Data penerimaan berhasil dihapus.');
-            $this->dispatch('penerimaanDeleted');
+            $tanggalAwal = $tanggalAwal ?: "{$tahun}-01-01";
+            $tanggalAkhir = $tanggalAkhir ?: "{$tahun}-12-31";
             
-            if ($this->showDetailModal && $this->selectedKodeRekening) {
-                $this->loadDetailPenerimaan($this->selectedKodeRekening->id);
+            $filename = 'LRA_' . $tahun;
+            
+            $skpdId = null;
+            $user = auth()->user();
+            
+            if ($user->skpd_id && !$user->canViewAllSkpd()) {
+                $skpdId = $user->skpd_id;
+                if ($user->skpd && $user->skpd->kode_opd) {
+                    $filename .= '_' . str_replace([' ', '/'], '_', $user->skpd->kode_opd);
+                }
+            } elseif ($this->selectedSkpdId) {
+                $skpdId = $this->selectedSkpdId;
+                $skpd = Skpd::find($this->selectedSkpdId);
+                if ($skpd && $skpd->kode_opd) {
+                    $filename .= '_' . str_replace([' ', '/'], '_', $skpd->kode_opd);
+                }
+            } else {
+                $filename .= '_KONSOLIDASI';
             }
-        } else {
-            session()->flash('error', 'Data penerimaan tidak ditemukan.');
+            
+            $filename .= '_' . date('YmdHis') . '.xlsx';
+            
+            Log::info('Export LRA', [
+                'user' => $user->name,
+                'tahun' => $tahun,
+                'tanggal_awal' => $tanggalAwal,
+                'tanggal_akhir' => $tanggalAkhir,
+                'skpd_id' => $skpdId,
+                'filename' => $filename
+            ]);
+            
+            return Excel::download(
+                new LaporanRealisasiExport($tahun, $tanggalAwal, $tanggalAkhir, $skpdId),
+                $filename
+            );
+            
+        } catch (\Exception $e) {
+            Log::error('Export LRA Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            session()->flash('error', 'Gagal export laporan: ' . $e->getMessage());
+            return redirect()->back();
         }
     }
+
+    // ==========================================
+    // DELETE METHOD
+    // ==========================================
+    
+    public function delete($id)
+    {
+        $penerimaan = Penerimaan::find($id);
+        
+        if (!$penerimaan) {
+            session()->flash('error', 'Data penerimaan tidak ditemukan.');
+            return;
+        }
+        
+        $user = auth()->user();
+        
+        // Authorization check
+        if (!$user->canViewAllSkpd() && $penerimaan->skpd_id != $user->skpd_id) {
+            session()->flash('error', 'Anda tidak memiliki akses untuk menghapus data ini.');
+            return;
+        }
+        
+        $penerimaan->delete();
+        session()->flash('message', 'Data penerimaan berhasil dihapus.');
+        $this->dispatch('penerimaanDeleted');
+        
+        // Refresh detail modal if open
+        if ($this->showDetailModal && $this->selectedKodeRekening) {
+            $this->loadDetailPenerimaan($this->selectedKodeRekening->id);
+        }
+    }
+    
+    // ==========================================
+    // DETAIL MODAL METHODS
+    // ==========================================
     
     public function showDetail($kodeRekeningId)
     {
         $this->selectedKodeRekening = KodeRekening::find($kodeRekeningId);
+        
         if ($this->selectedKodeRekening) {
             $this->loadDetailPenerimaan($kodeRekeningId);
             $this->showDetailModal = true;
@@ -380,14 +432,17 @@ public function delete($id)
     private function loadDetailPenerimaan($kodeRekeningId)
     {
         $user = auth()->user();
+        
         $query = Penerimaan::where('kode_rekening_id', $kodeRekeningId);
         
-        if ($user->skpd_id && !$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+        // Apply SKPD filter
+        if ($user->skpd_id && !$user->canViewAllSkpd()) {
             $query->where('skpd_id', $user->skpd_id);
         } elseif ($this->selectedSkpdId) {
             $query->where('skpd_id', $this->selectedSkpdId);
         }
         
+        // Apply date filter
         if ($this->tahun) {
             $query->where('tahun', $this->tahun);
         }
@@ -407,7 +462,11 @@ public function delete($id)
         $this->detailPenerimaan = [];
     }
 
-public function openImportModal()
+    // ==========================================
+    // IMPORT METHODS
+    // ==========================================
+    
+    public function openImportModal()
     {
         $this->showImportModal = true;
         $this->importTahun = $this->tahun;
@@ -465,11 +524,17 @@ public function openImportModal()
         }
     }
   
+    // ==========================================
+    // RENDER METHOD - MAIN LOGIC
+    // ==========================================
+    
     public function render()
     {
         $user = auth()->user();
         
-        // Get visible levels
+        // ========================================
+        // STEP 1: Get Visible Levels
+        // ========================================
         $visibleLevels = [];
         if ($this->showLevel1) $visibleLevels[] = 1;
         if ($this->showLevel2) $visibleLevels[] = 2;
@@ -478,39 +543,48 @@ public function openImportModal()
         if ($this->showLevel5) $visibleLevels[] = 5;
         if ($this->showLevel6) $visibleLevels[] = 6;
         
-        // Get allowed kode rekening IDs for operator SKPD
+        // ========================================
+        // STEP 2: Get Allowed Kode Rekening IDs
+        // ========================================
         $allowedKodeIds = [];
-        if ($user->skpd_id && !$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
-            $skpdAccess = $user->skpd->kode_rekening_access ?? [];
-            
-            if (!empty($skpdAccess)) {
-                $allowedLevel6 = KodeRekening::whereIn('id', $skpdAccess)->get();
-                
-                foreach ($allowedLevel6 as $kode6) {
-                    $allowedKodeIds[] = $kode6->id;
-                    
-                    $currentKode = $kode6;
-                    while ($currentKode->parent_id) {
-                        $allowedKodeIds[] = $currentKode->parent_id;
-                        $currentKode = $currentKode->parent;
-                    }
+        $level6AllowedIds = []; // Untuk filter penerimaan
+        
+        if ($user->canViewAllSkpd()) {
+            // Super Admin / Kepala Badan
+            if ($this->selectedSkpdId) {
+                // Ada SKPD yang dipilih - filter by SKPD
+                $selectedSkpd = Skpd::find($this->selectedSkpdId);
+                if ($selectedSkpd) {
+                    $allowedKodeIds = $selectedSkpd->getHierarchicalKodeRekeningIds();
+                    $level6AllowedIds = $selectedSkpd->getLevel6KodeRekeningIds();
                 }
-                
-                $allowedKodeIds = array_unique($allowedKodeIds);
+            }
+            // Jika tidak ada SKPD dipilih, allowedKodeIds tetap empty = no restriction
+            
+        } else {
+            // Operator SKPD - hanya kode yang di-assign
+            if ($user->skpd_id && $user->skpd) {
+                $allowedKodeIds = $user->skpd->getHierarchicalKodeRekeningIds();
+                $level6AllowedIds = $user->skpd->getLevel6KodeRekeningIds();
             }
         }
         
-        // Base query for kode rekening
+        // ========================================
+        // STEP 3: Build Kode Rekening Query
+        // ========================================
         $query = KodeRekening::where('is_active', true);
         
+        // Apply allowed kode filter
         if (!empty($allowedKodeIds)) {
             $query->whereIn('id', $allowedKodeIds);
         }
         
+        // Apply visible levels
         if (!empty($visibleLevels)) {
             $query->whereIn('level', $visibleLevels);
         }
         
+        // Apply search
         if ($this->search) {
             $query->where(function($q) {
                 $q->where('kode', 'like', '%' . $this->search . '%')
@@ -518,6 +592,7 @@ public function openImportModal()
             });
         }
         
+        // Apply kode rekening filter
         if ($this->kodeRekeningId) {
             $selectedKode = KodeRekening::find($this->kodeRekeningId);
             if ($selectedKode) {
@@ -525,15 +600,20 @@ public function openImportModal()
             }
         }
         
+        // Get all kode rekening
         $allKodeRekening = $query->orderBy('kode', 'asc')->get();
 
-        // Calculate totals for each kode rekening
+        // ========================================
+        // STEP 4: Calculate Totals for Each Kode
+        // ========================================
         foreach ($allKodeRekening as $kode) {
             $penerimaanQuery = Penerimaan::query();
             
             if ($kode->level == 6) {
+                // Level 6 - direct match
                 $penerimaanQuery->where('kode_rekening_id', $kode->id);
             } else {
+                // Level 1-5 - sum dari children Level 6
                 $pattern = $kode->kode . '%';
                 $penerimaanQuery->whereHas('kodeRekening', function($q) use ($pattern) {
                     $q->where('kode', 'like', $pattern)
@@ -541,14 +621,14 @@ public function openImportModal()
                 });
             }
             
-            // Apply SKPD filter
-            if ($user->skpd_id && !$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+            // Apply SKPD filter to penerimaan
+            if ($user->skpd_id && !$user->canViewAllSkpd()) {
                 $penerimaanQuery->where('skpd_id', $user->skpd_id);
-            } elseif ($this->selectedSkpdId && $user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+            } elseif ($this->selectedSkpdId && $user->canViewAllSkpd()) {
                 $penerimaanQuery->where('skpd_id', $this->selectedSkpdId);
             }
             
-            // Apply filters
+            // Apply date filters
             if ($this->tahun) {
                 $penerimaanQuery->where('tahun', $this->tahun);
             }
@@ -564,14 +644,18 @@ public function openImportModal()
             $kode->tanggal_terakhir = $penerimaanQuery->max('tanggal');
         }
         
-        // Filter out empty if hideEmpty is true
+        // ========================================
+        // STEP 5: Filter Empty if Needed
+        // ========================================
         if ($this->hideEmpty) {
             $allKodeRekening = $allKodeRekening->filter(function($kode) {
                 return $kode->total_penerimaan != 0;
             });
         }
 
-        // Pagination
+        // ========================================
+        // STEP 6: Pagination
+        // ========================================
         $currentPage = $this->getPage() ?? 1;
         $perPage = $this->perPage;
         
@@ -588,7 +672,9 @@ public function openImportModal()
         
         $penerimaan->withPath('');
         
-        // Calculate grand total
+        // ========================================
+        // STEP 7: Calculate Grand Total
+        // ========================================
         $grandTotalQuery = DB::table('penerimaan')
             ->when($this->tahun, function($q) {
                 $q->where('tahun', $this->tahun);
@@ -599,25 +685,22 @@ public function openImportModal()
             });
             
         // Apply SKPD filter to grand total
-        if ($user->skpd_id && !$user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+        if ($user->skpd_id && !$user->canViewAllSkpd()) {
             $grandTotalQuery->where('skpd_id', $user->skpd_id);
-        } elseif ($this->selectedSkpdId && $user->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
+        } elseif ($this->selectedSkpdId && $user->canViewAllSkpd()) {
             $grandTotalQuery->where('skpd_id', $this->selectedSkpdId);
         }
         
-        // Filter by allowed kode rekening for operator SKPD
-        if (!empty($allowedKodeIds)) {
-            $level6AllowedIds = KodeRekening::whereIn('id', $allowedKodeIds)
-                                           ->where('level', 6)
-                                           ->pluck('id')
-                                           ->toArray();
-            if (!empty($level6AllowedIds)) {
-                $grandTotalQuery->whereIn('kode_rekening_id', $level6AllowedIds);
-            }
+        // Filter by Level 6 allowed IDs (untuk operator SKPD)
+        if (!empty($level6AllowedIds)) {
+            $grandTotalQuery->whereIn('kode_rekening_id', $level6AllowedIds);
         }
         
         $grandTotal = $grandTotalQuery->sum('jumlah');
         
+        // ========================================
+        // STEP 8: Return View
+        // ========================================
         return view('livewire.penerimaan.index', [
             'penerimaan' => $penerimaan,
             'grandTotal' => $grandTotal,

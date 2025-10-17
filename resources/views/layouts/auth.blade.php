@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SILAPAT - BKPAD Banjarmasin</title>
+    <title>SILAPAT - BPKPAD Banjarmasin</title>
     
     <!-- Favicon -->
-     <link rel="icon" type="image/png" href="{{ asset('images/silapat-favicon.png') }}" />
+    <link rel="icon" type="image/png" href="{{ asset('images/silapat-favicon.png') }}" />
     <!-- <link rel="icon" type="image/x-icon" href="{{ asset('sneat-template/assets/img/favicon/favicon.ico') }}" /> -->
 
     <!-- Fonts -->
@@ -93,5 +93,8 @@
     <script src="{{ asset('sneat-template/assets/vendor/libs/jquery/jquery.js') }}"></script>
     <script src="{{ asset('sneat-template/assets/vendor/libs/popper/popper.js') }}"></script>
     <script src="{{ asset('sneat-template/assets/vendor/js/bootstrap.js') }}"></script>
+    
+    <!-- Page Scripts -->
+    @stack('scripts')
 </body>
 </html>

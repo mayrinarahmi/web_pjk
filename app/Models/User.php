@@ -43,7 +43,10 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
-    // Helper methods untuk cek role
+    // ==========================================
+    // HELPER METHODS - ROLE CHECKING
+    // ==========================================
+    
     public function isSuperAdmin()
     {
         // Cek dengan Spatie Role
@@ -88,23 +91,100 @@ class User extends Authenticatable
         return $this->hasRole('Viewer') || $this->role_id == 3;
     }
 
-    // Helper untuk filter query berdasarkan SKPD
+    // ==========================================
+    // NEW HELPER METHODS - SKPD ACCESS
+    // ==========================================
+    
+    /**
+     * Check if user can view all SKPD data
+     * Super Admin dan Kepala Badan bisa lihat semua
+     */
+    public function canViewAllSkpd()
+    {
+        return $this->isSuperAdmin() || $this->isKepalaBadan();
+    }
+    
+    /**
+     * Get accessible kode rekening IDs for current user
+     * Including parent hierarchy (Level 1-6)
+     * 
+     * @return array Array of kode_rekening IDs that user can access
+     */
+    public function getAccessibleKodeRekeningIds()
+    {
+        // Super Admin dan Kepala Badan - akses semua
+        if ($this->canViewAllSkpd()) {
+            return []; // Empty array means no restriction
+        }
+        
+        // User tanpa SKPD - tidak ada akses
+        if (!$this->skpd_id || !$this->skpd) {
+            return [0]; // Return dummy ID to prevent showing all data
+        }
+        
+        // Operator SKPD - ambil dari skpd->kode_rekening_access
+        return $this->skpd->getHierarchicalKodeRekeningIds();
+    }
+    
+    /**
+     * Get accessible level 6 kode rekening only
+     * Used for dropdown selection
+     * 
+     * @return \Illuminate\Support\Collection
+     */
+    public function getAccessibleLevel6KodeRekening()
+    {
+        // Super Admin dan Kepala Badan - semua level 6
+        if ($this->canViewAllSkpd()) {
+            return KodeRekening::where('level', 6)
+                              ->where('is_active', true)
+                              ->orderBy('kode')
+                              ->get();
+        }
+        
+        // User tanpa SKPD - kosong
+        if (!$this->skpd_id || !$this->skpd) {
+            return collect([]);
+        }
+        
+        // Operator SKPD - hanya yang di-assign
+        $skpdAccess = $this->skpd->kode_rekening_access ?? [];
+        
+        if (empty($skpdAccess)) {
+            return collect([]);
+        }
+        
+        return KodeRekening::whereIn('id', $skpdAccess)
+                          ->where('level', 6)
+                          ->where('is_active', true)
+                          ->orderBy('kode')
+                          ->get();
+    }
+
+    // ==========================================
+    // PERMISSION HELPER METHODS
+    // ==========================================
+    
+    /**
+     * Helper untuk filter query berdasarkan SKPD
+     * @deprecated Use getAccessibleKodeRekeningIds() instead
+     */
     public function scopeFilterBySkpd($query)
     {
-        if ($this->isSuperAdmin() || $this->isKepalaBadan()) {
-            // Super Admin dan Kepala Badan bisa lihat semua
+        if ($this->canViewAllSkpd()) {
             return $query;
         }
         
         if ($this->skpd_id) {
-            // Operator SKPD hanya lihat data SKPD sendiri
             return $query->where('skpd_id', $this->skpd_id);
         }
         
         return $query;
     }
     
-    // Helper untuk cek apakah user bisa edit data
+    /**
+     * Helper untuk cek apakah user bisa edit data
+     */
     public function canEdit()
     {
         // Kepala Badan tidak bisa edit
@@ -116,17 +196,19 @@ class User extends Authenticatable
         return $this->isSuperAdmin() || $this->isOperator() || $this->isOperatorSkpd();
     }
     
-    // Helper untuk cek apakah user bisa delete data
+    /**
+     * Helper untuk cek apakah user bisa delete data
+     */
     public function canDelete()
     {
-        // Sama dengan canEdit
         return $this->canEdit();
     }
     
-    // Helper untuk cek apakah user bisa create data
+    /**
+     * Helper untuk cek apakah user bisa create data
+     */
     public function canCreate()
     {
-        // Sama dengan canEdit
         return $this->canEdit();
     }
 }
