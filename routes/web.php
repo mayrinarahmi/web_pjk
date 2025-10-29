@@ -2,8 +2,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Http;  // ← ADD THIS FOR TURNSTILE
-use Illuminate\Support\Facades\Log;   // ← ADD THIS FOR LOGGING
+use Illuminate\Support\Facades\Log;   // Keep for logging
 use App\Http\Livewire\Dashboard;
 
 // Controllers untuk Laporan Realisasi
@@ -50,7 +49,7 @@ Route::middleware('guest')->group(function () {
     })->name('login');
 
     // ========================================
-    // AUTHENTICATE ROUTE (WITH TURNSTILE)
+    // AUTHENTICATE ROUTE (SIMPLE - NO CAPTCHA)
     // ========================================
     Route::post('/authenticate', function (Request $request) {
         // Validate form inputs
@@ -63,66 +62,7 @@ Route::middleware('guest')->group(function () {
             'password.required' => 'Password wajib diisi'
         ]);
 
-        // ========================================
-        // CLOUDFLARE TURNSTILE VALIDATION
-        // ========================================
-        $turnstileToken = $request->input('cf-turnstile-response');
-        
-        // Check if token exists
-        if (empty($turnstileToken)) {
-            Log::warning('Turnstile validation failed: Empty token', [
-                'ip' => $request->ip(),
-                'nip' => $credentials['login']
-            ]);
-            
-            return back()
-                ->withErrors(['captcha' => 'Verifikasi keamanan gagal. Silakan refresh halaman dan coba lagi.'])
-                ->withInput($request->except('password'));
-        }
-        
-        try {
-            // Call Cloudflare Turnstile API
-            $response = Http::timeout(10)->asForm()->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
-                'secret' => env('TURNSTILE_SECRET_KEY'),
-                'response' => $turnstileToken,
-                'remoteip' => $request->ip(),
-            ]);
-
-            $result = $response->json();
-
-            // Check validation result
-            if (!($result['success'] ?? false)) {
-                Log::warning('Turnstile validation failed', [
-                    'ip' => $request->ip(),
-                    'nip' => $credentials['login'],
-                    'errors' => $result['error-codes'] ?? [],
-                ]);
-                
-                return back()
-                    ->withErrors(['captcha' => 'Verifikasi keamanan gagal. Silakan coba lagi.'])
-                    ->withInput($request->except('password'));
-            }
-            
-            Log::info('Turnstile validation success', [
-                'ip' => $request->ip(),
-                'nip' => $credentials['login']
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Turnstile validation error', [
-                'ip' => $request->ip(),
-                'nip' => $credentials['login'],
-                'error' => $e->getMessage()
-            ]);
-            
-            return back()
-                ->withErrors(['captcha' => 'Terjadi kesalahan verifikasi keamanan. Silakan coba lagi.'])
-                ->withInput($request->except('password'));
-        }
-
-        // ========================================
-        // EXISTING LOGIN LOGIC
-        // ========================================
+        // Attempt login
         $attemptCredentials = [
             'nip' => $credentials['login'],
             'password' => $credentials['password']
