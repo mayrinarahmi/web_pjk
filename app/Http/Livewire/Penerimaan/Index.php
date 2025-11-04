@@ -28,6 +28,11 @@ class Index extends Component
     public $kodeRekeningId;
     public $tahun;
     
+    // Display properties untuk info box
+    public $displayTanggalMulai;
+    public $displayTanggalSelesai;
+    public $latestPenerimaanDate;
+    
     // Filter SKPD
     public $selectedSkpdId = '';
     public $skpdList = [];
@@ -105,7 +110,10 @@ class Index extends Component
                                            ->pluck('tahun')
                                            ->toArray();
         
-        $this->setTanggalByTahun();
+        // =============================================
+        // AUTO-SET TANGGAL KE DATA TERAKHIR
+        // =============================================
+        $this->setTanggalToLatestData();
     }
     
     /**
@@ -151,17 +159,65 @@ class Index extends Component
     }
     
     /**
-     * Set tanggal mulai dan selesai berdasarkan tahun
+     * Set tanggal ke data penerimaan terakhir
+     * Auto-set filter tanggal berdasarkan data terakhir yang diinput
+     * ✅ FIXED: Convert Carbon object ke string format Y-m-d
      */
-    private function setTanggalByTahun()
+    private function setTanggalToLatestData()
     {
-        if ($this->tahun) {
-            $this->tanggalMulai = $this->tahun . '-01-01';
-            $this->tanggalSelesai = $this->tahun . '-12-31';
-        } else {
+        if (!$this->tahun) {
             $this->tanggalMulai = null;
             $this->tanggalSelesai = null;
+            $this->displayTanggalMulai = null;
+            $this->displayTanggalSelesai = null;
+            $this->latestPenerimaanDate = null;
+            return;
         }
+        
+        // Set tanggal mulai = awal tahun
+        $this->tanggalMulai = $this->tahun . '-01-01';
+        
+        // Query: Cari tanggal penerimaan terakhir
+        $latestPenerimaanQuery = Penerimaan::query()
+            ->where('tahun', $this->tahun);
+        
+        // Apply SKPD filter
+        $user = auth()->user();
+        if ($user->skpd_id && !$user->canViewAllSkpd()) {
+            $latestPenerimaanQuery->where('skpd_id', $user->skpd_id);
+        } elseif ($this->selectedSkpdId && $user->canViewAllSkpd()) {
+            $latestPenerimaanQuery->where('skpd_id', $this->selectedSkpdId);
+        }
+        
+        $latestPenerimaan = $latestPenerimaanQuery->orderBy('tanggal', 'desc')->first();
+        
+        // Set tanggal selesai berdasarkan data terakhir
+        if ($latestPenerimaan && $latestPenerimaan->tanggal) {
+            // Ada data → gunakan tanggal penerimaan terakhir
+            // ✅ PERBAIKAN: Convert Carbon object ke string format Y-m-d
+            $tanggalTerakhir = $latestPenerimaan->tanggal;
+            
+            if ($tanggalTerakhir instanceof \Carbon\Carbon) {
+                // Jika sudah Carbon object
+                $this->tanggalSelesai = $tanggalTerakhir->format('Y-m-d');
+                $this->latestPenerimaanDate = $tanggalTerakhir->format('Y-m-d');
+            } else {
+                // Jika masih string, parse dulu
+                $this->tanggalSelesai = Carbon::parse($tanggalTerakhir)->format('Y-m-d');
+                $this->latestPenerimaanDate = Carbon::parse($tanggalTerakhir)->format('Y-m-d');
+            }
+            
+        } else {
+            // Belum ada data → gunakan tanggal hari ini atau akhir tahun
+            $today = Carbon::now()->format('Y-m-d');
+            $endOfYear = $this->tahun . '-12-31';
+            $this->tanggalSelesai = (Carbon::now()->year == $this->tahun) ? $today : $endOfYear;
+            $this->latestPenerimaanDate = null;
+        }
+        
+        // Set display dates untuk info box
+        $this->displayTanggalMulai = $this->tanggalMulai;
+        $this->displayTanggalSelesai = $this->tanggalSelesai;
     }
 
     // ==========================================
@@ -176,7 +232,9 @@ class Index extends Component
     public function updatedTahun()
     {
         $this->resetPage();
-        $this->setTanggalByTahun();
+        
+        // Auto-set tanggal ke data terakhir
+        $this->setTanggalToLatestData();
     }
     
     public function updatedKodeRekeningId()
@@ -186,11 +244,15 @@ class Index extends Component
     
     public function updatedTanggalMulai()
     {
+        // Update display date
+        $this->displayTanggalMulai = $this->tanggalMulai;
         $this->resetPage();
     }
     
     public function updatedTanggalSelesai()
     {
+        // Update display date
+        $this->displayTanggalSelesai = $this->tanggalSelesai;
         $this->resetPage();
     }
     
@@ -238,6 +300,31 @@ class Index extends Component
                                                     ->where('is_active', true)
                                                     ->orderBy('kode')
                                                     ->get();
+        }
+        
+        // Update latest date based on new SKPD filter
+        if ($this->tahun) {
+            $latestPenerimaanQuery = Penerimaan::query()
+                ->where('tahun', $this->tahun);
+            
+            if ($this->selectedSkpdId) {
+                $latestPenerimaanQuery->where('skpd_id', $this->selectedSkpdId);
+            }
+            
+            $latestPenerimaan = $latestPenerimaanQuery->orderBy('tanggal', 'desc')->first();
+            
+            if ($latestPenerimaan && $latestPenerimaan->tanggal) {
+                // ✅ PERBAIKAN: Convert ke string
+                $tanggalTerakhir = $latestPenerimaan->tanggal;
+                
+                if ($tanggalTerakhir instanceof \Carbon\Carbon) {
+                    $this->latestPenerimaanDate = $tanggalTerakhir->format('Y-m-d');
+                } else {
+                    $this->latestPenerimaanDate = Carbon::parse($tanggalTerakhir)->format('Y-m-d');
+                }
+            } else {
+                $this->latestPenerimaanDate = null;
+            }
         }
     }
     
@@ -288,7 +375,9 @@ class Index extends Component
         // Reset tahun ke aktif
         $activeTahun = TahunAnggaran::getActive();
         $this->tahun = $activeTahun ? $activeTahun->tahun : Carbon::now()->year;
-        $this->setTanggalByTahun();
+        
+        // Auto-set tanggal ke data terakhir
+        $this->setTanggalToLatestData();
         
         // Reset level visibility
         $this->showLevel1 = true;
@@ -310,6 +399,14 @@ class Index extends Component
         if ($this->tahun) {
             $this->tanggalMulai = $this->tahun . '-01-01';
             $this->tanggalSelesai = $this->tahun . '-12-31';
+            
+            // Update display dates
+            $this->displayTanggalMulai = $this->tanggalMulai;
+            $this->displayTanggalSelesai = $this->tanggalSelesai;
+            
+            // Reset latest date info karena sekarang full year
+            $this->latestPenerimaanDate = null;
+            
             $this->resetPage();
             
             session()->flash('message', 'Filter tanggal direset ke tahun penuh: ' . $this->tahun);
@@ -384,36 +481,78 @@ class Index extends Component
         }
     }
 
-    // ==========================================
-    // DELETE METHOD
-    // ==========================================
-    
-    public function delete($id)
-    {
-        $penerimaan = Penerimaan::find($id);
-        
-        if (!$penerimaan) {
-            session()->flash('error', 'Data penerimaan tidak ditemukan.');
-            return;
-        }
-        
-        $user = auth()->user();
-        
-        // Authorization check
-        if (!$user->canViewAllSkpd() && $penerimaan->skpd_id != $user->skpd_id) {
-            session()->flash('error', 'Anda tidak memiliki akses untuk menghapus data ini.');
-            return;
-        }
-        
-        $penerimaan->delete();
-        session()->flash('message', 'Data penerimaan berhasil dihapus.');
-        $this->dispatch('penerimaanDeleted');
-        
-        // Refresh detail modal if open
-        if ($this->showDetailModal && $this->selectedKodeRekening) {
-            $this->loadDetailPenerimaan($this->selectedKodeRekening->id);
-        }
+  // ==========================================
+// DELETE METHOD
+// ==========================================
+
+public function delete($id)
+{
+    // ... existing code ...
+}
+
+// ========================================
+// TAMBAHAN BARU: DELETE ALL METHOD
+// ========================================
+
+/**
+ * Hapus semua data penerimaan
+ * HANYA SUPER ADMIN yang bisa akses
+ */
+public function deleteAllPenerimaan()
+{
+    // Authorization check - SUPER ADMIN ONLY
+    if (!auth()->user()->isSuperAdmin()) {
+        session()->flash('error', 'Unauthorized. Hanya Super Admin yang dapat menghapus semua data.');
+        return;
     }
+    
+    try {
+        // Count total records
+        $totalRecords = Penerimaan::count();
+        
+        if ($totalRecords == 0) {
+            session()->flash('info', 'Tidak ada data penerimaan untuk dihapus.');
+            return;
+        }
+        
+        // Log activity
+        Log::critical('DELETE ALL PENERIMAAN', [
+            'user_id' => auth()->id(),
+            'user_name' => auth()->user()->name,
+            'user_email' => auth()->user()->email,
+            'records_deleted' => $totalRecords,
+            'ip_address' => request()->ip(),
+            'timestamp' => now()
+        ]);
+        
+        // Hard delete ALL records from database
+        DB::beginTransaction();
+        
+        try {
+            Penerimaan::query()->delete();
+            DB::commit();
+            
+            Log::info("Successfully deleted {$totalRecords} penerimaan records");
+            
+            session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan secara permanen dari database.");
+            
+            // Redirect to refresh page
+            return redirect()->route('penerimaan.index');
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+        
+    } catch (\Exception $e) {
+        Log::error('Error deleting all penerimaan', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        session()->flash('error', 'Terjadi kesalahan saat menghapus data: ' . $e->getMessage());
+    }
+}
     
     // ==========================================
     // DETAIL MODAL METHODS

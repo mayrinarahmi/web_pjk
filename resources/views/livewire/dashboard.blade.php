@@ -4,7 +4,6 @@
         <h4>Dashboard Penerimaan Pajak Daerah</h4>
         <div class="d-flex align-items-center">
             <label class="text-muted me-2">Tahun Anggaran:</label>
-            <!-- PERBAIKAN: Tambah wire:change dan wire:key untuk force update -->
             <select class="form-select form-select-sm d-inline-block w-auto" 
                     wire:model.lazy="selectedTahunAnggaran"
                     wire:change="loadDashboardData"
@@ -30,12 +29,21 @@
         </div>
     </div>
 
-    <!-- TAMBAHAN: Info User/SKPD -->
-    @if($userInfo)
-    <div class="alert alert-info py-2 mb-3">
-        <i class="bx bx-info-circle"></i> {{ $userInfo }}
+    <!-- ========================================= -->
+    <!-- TAMBAHAN BARU: Info Box dengan Tanggal Data -->
+    <!-- ========================================= -->
+    <!-- Info Tanggal Data Penerimaan -->
+@if($latestPenerimaanDateFormatted)
+<div class="alert alert-info py-2 mb-3">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-calendar fs-5 me-2"></i>
+        <div>
+            Data penerimaan sampai dengan: 
+            <strong class="text-primary">{{ $latestPenerimaanDateFormatted }}</strong>
+        </div>
     </div>
-    @endif
+</div>
+@endif
 
     <!-- Main Content dengan Loading State -->
     <div wire:loading.class="opacity-50" wire:target="loadDashboardData">
@@ -348,7 +356,7 @@
 
     // Listen for Livewire updates (Livewire v3)
     document.addEventListener('livewire:initialized', () => {
-        // PERBAIKAN: Listen untuk event refreshChart dengan data
+        // Listen untuk event refreshChart dengan data
         Livewire.on('refreshChart', (event) => {
             // Extract data dari event (Livewire v3 format)
             const chartData = event.chartData || event[0]?.chartData || event;

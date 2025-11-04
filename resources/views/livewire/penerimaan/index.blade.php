@@ -1,43 +1,56 @@
 <div> {{-- Single root div untuk Livewire --}}
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Daftar Penerimaan</h5>
-            {{-- Tombol Import, Export & Create --}}
-            @canany(['create-penerimaan', 'import-penerimaan', 'view-laporan'])
-            <div class="d-flex gap-2">
-                {{-- Tombol Import Excel --}}
-                @can('import-penerimaan')
-                <button type="button" class="btn btn-success btn-sm" wire:click="openImportModal">
-                    <i class="bx bx-upload"></i> Import Excel
-                </button>
-                @endcan
-                
-                {{-- Tombol Export LRA --}}
-                @can('view-laporan')
-                <button type="button" 
-                        class="btn btn-warning btn-sm" 
-                        wire:click="exportLaporanRealisasi"
-                        wire:loading.attr="disabled"
-                        wire:target="exportLaporanRealisasi"
-                        @if(!$tahun) disabled title="Pilih tahun terlebih dahulu" @endif>
-                    <span wire:loading.remove wire:target="exportLaporanRealisasi">
-                        <i class="bx bx-download"></i> Export LRA
-                    </span>
-                    <span wire:loading wire:target="exportLaporanRealisasi">
-                        <span class="spinner-border spinner-border-sm me-1"></span> Exporting...
-                    </span>
-                </button>
-                @endcan
-                
-                {{-- Tombol Tambah Penerimaan --}}
-                @can('create-penerimaan')
-                <a href="{{ route('penerimaan.create') }}" class="btn btn-primary btn-sm">
-                    <i class="bx bx-plus"></i> Tambah Penerimaan
-                </a>
-                @endcan
-            </div>
-            @endcanany
-        </div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Daftar Penerimaan</h5>
+    
+    {{-- Tombol Import, Export & Create --}}
+    @canany(['create-penerimaan', 'import-penerimaan', 'view-laporan'])
+    <div class="d-flex gap-2">
+        {{-- Tombol Import Excel --}}
+        @can('import-penerimaan')
+        <button type="button" class="btn btn-success btn-sm" wire:click="openImportModal">
+            <i class="bx bx-upload"></i> Import Excel
+        </button>
+        @endcan
+        
+        {{-- Tombol Export LRA --}}
+        @can('view-laporan')
+        <button type="button" 
+                class="btn btn-warning btn-sm" 
+                wire:click="exportLaporanRealisasi"
+                wire:loading.attr="disabled"
+                wire:target="exportLaporanRealisasi"
+                @if(!$tahun) disabled title="Pilih tahun terlebih dahulu" @endif>
+            <span wire:loading.remove wire:target="exportLaporanRealisasi">
+                <i class="bx bx-download"></i> Export LRA
+            </span>
+            <span wire:loading wire:target="exportLaporanRealisasi">
+                <span class="spinner-border spinner-border-sm me-1"></span> Exporting...
+            </span>
+        </button>
+        @endcan
+        
+        {{-- Tombol Tambah Penerimaan --}}
+        @can('create-penerimaan')
+        <a href="{{ route('penerimaan.create') }}" class="btn btn-primary btn-sm">
+            <i class="bx bx-plus"></i> Tambah Penerimaan
+        </a>
+        @endcan
+        
+        {{-- ========================================== --}}
+        {{-- TAMBAHAN BARU: Tombol Hapus Semua Data --}}
+        {{-- ========================================== --}}
+        @if(auth()->user()->isSuperAdmin())
+        <button type="button" 
+                class="btn btn-danger btn-sm"
+                onclick="confirmDeleteAll()"
+                title="Hapus Semua Data Penerimaan">
+            <i class="bx bx-trash"></i> Hapus Semua Data
+        </button>
+        @endif
+    </div>
+    @endcanany
+</div>
         
 
         <div class="card-body">
@@ -664,4 +677,25 @@
           }
       }
   </style>
+
+  {{-- JavaScript Konfirmasi Hapus Semua --}}
+  @push('scripts')
+  <script>
+  function confirmDeleteAll() {
+      // Konfirmasi pertama
+      if (!confirm('⚠️ PERINGATAN!\n\nAnda akan menghapus SEMUA DATA PENERIMAAN dari database!\n\nTindakan ini TIDAK BISA DIBATALKAN!\n\nPastikan Anda sudah melakukan backup database!\n\nLanjutkan?')) {
+          return;
+      }
+      
+      // Konfirmasi kedua (double check)
+      if (!confirm('⚠️ KONFIRMASI TERAKHIR!\n\nApakah Anda BENAR-BENAR YAKIN ingin menghapus SEMUA data penerimaan?\n\nKlik OK untuk melanjutkan penghapusan PERMANEN.')) {
+          return;
+      }
+      
+      // Panggil method Livewire
+      @this.call('deleteAllPenerimaan');
+  }
+  </script>
+  @endpush
+
 </div> {{-- End of single root div --}}

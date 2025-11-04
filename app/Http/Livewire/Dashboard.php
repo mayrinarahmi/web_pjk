@@ -60,9 +60,15 @@ class Dashboard extends Component
     
     public $kategoris = [];
     
-    // TAMBAHAN: Info user dan SKPD
+    // Info user dan SKPD
     public $userInfo = '';
     public $isSkpdFiltered = false;
+    
+    // ========================================
+    // TAMBAHAN BARU: Info tanggal data terakhir
+    // ========================================
+    public $latestPenerimaanDate = null;
+    public $latestPenerimaanDateFormatted = null;
 
     public function mount()
     {
@@ -70,7 +76,7 @@ class Dashboard extends Component
         $this->currentMonth = date('n');
         $this->currentQuarter = ceil($this->currentMonth / 3);
         
-        // TAMBAHAN: Set user info untuk display
+        // Set user info untuk display
         $user = auth()->user();
         if ($user->isSuperAdmin()) {
             $this->userInfo = 'Dashboard Konsolidasi - Semua SKPD';
@@ -83,12 +89,12 @@ class Dashboard extends Component
             $this->isSkpdFiltered = true;
         }
         
-        // PERBAIKAN: Load semua tahun anggaran yang tersedia
+        // Load semua tahun anggaran yang tersedia
         $this->tahunAnggaranList = TahunAnggaran::orderBy('tahun', 'desc')
             ->orderBy('jenis_anggaran', 'desc')
             ->get();
             
-        // PERBAIKAN: Cari tahun anggaran yang aktif untuk default selection
+        // Cari tahun anggaran yang aktif untuk default selection
         $activeTahunAnggaran = TahunAnggaran::where('is_active', true)->first();
         
         if ($activeTahunAnggaran) {
@@ -122,7 +128,7 @@ class Dashboard extends Component
         $this->selectedTahunAnggaran = $value;
         $this->loadDashboardData();
         
-        // PERBAIKAN: Dispatch event dengan data chart terbaru
+        // Dispatch event dengan data chart terbaru
         $this->dispatch('refreshChart', ['chartData' => $this->chartData]);
     }
 
@@ -150,6 +156,11 @@ class Dashboard extends Component
         
         // Load data untuk tabel kategori
         $this->loadKategoriData();
+        
+        // ========================================
+        // TAMBAHAN BARU: Load tanggal data terakhir
+        // ========================================
+        $this->loadLatestPenerimaanDate();
     }
     
     private function resetDataToZero()
@@ -168,6 +179,52 @@ class Dashboard extends Component
         $this->lainLain = $defaultData;
         $this->chartData = ['categories' => [], 'series' => []];
         $this->kategoris = [];
+        
+        // Reset tanggal terakhir
+        $this->latestPenerimaanDate = null;
+        $this->latestPenerimaanDateFormatted = null;
+    }
+
+    // ========================================
+    // TAMBAHAN BARU: Method untuk load tanggal terakhir
+    // ========================================
+    private function loadLatestPenerimaanDate()
+    {
+        $tahunAnggaran = TahunAnggaran::find($this->selectedTahunAnggaran);
+        
+        if (!$tahunAnggaran) {
+            $this->latestPenerimaanDate = null;
+            $this->latestPenerimaanDateFormatted = null;
+            return;
+        }
+        
+        $selectedYear = $tahunAnggaran->tahun;
+        
+        // Query tanggal penerimaan terakhir
+        $query = Penerimaan::query()
+            ->where('tahun', $selectedYear);
+        
+        // Apply SKPD filter
+        $query = $query->filterBySkpd();
+        
+        $latestPenerimaan = $query->orderBy('tanggal', 'desc')->first();
+        
+        if ($latestPenerimaan && $latestPenerimaan->tanggal) {
+            // Convert ke string format Y-m-d jika Carbon object
+            if ($latestPenerimaan->tanggal instanceof \Carbon\Carbon) {
+                $this->latestPenerimaanDate = $latestPenerimaan->tanggal->format('Y-m-d');
+            } else {
+                $this->latestPenerimaanDate = Carbon::parse($latestPenerimaan->tanggal)->format('Y-m-d');
+            }
+            
+            // Format untuk display (dd MMMM yyyy)
+            $this->latestPenerimaanDateFormatted = Carbon::parse($this->latestPenerimaanDate)
+                ->locale('id')
+                ->isoFormat('D MMMM YYYY');
+        } else {
+            $this->latestPenerimaanDate = null;
+            $this->latestPenerimaanDateFormatted = null;
+        }
     }
 
     private function calculateRealisasi($kodePrefix)
@@ -246,9 +303,9 @@ class Dashboard extends Component
         // Calculate target based on cumulative percentage
         $target = ($pagu * $totalPersentase) / 100;
         
-        // PERBAIKAN: Get realisasi dengan filter tahun yang benar
+        // Get realisasi dengan filter tahun yang benar
         $query = Penerimaan::whereIn('kode_rekening_id', $kodeRekeningIds)
-            ->where('tahun', $selectedYear);  // Gunakan field tahun, bukan whereYear
+            ->where('tahun', $selectedYear);
             
         // Hanya filter by month jika tahun yang dipilih adalah tahun sekarang
         if ($selectedYear == $this->currentYear) {
@@ -306,7 +363,7 @@ class Dashboard extends Component
             return;
         }
         
-        // PERBAIKAN: Gunakan tahun dari tahun anggaran yang dipilih
+        // Gunakan tahun dari tahun anggaran yang dipilih
         $selectedYear = $tahunAnggaran->tahun;
         
         // Data untuk 12 bulan
@@ -324,9 +381,8 @@ class Dashboard extends Component
                 $padIds = $this->getAllChildIds($padKode->id);
                 $padIds[] = $padKode->id;
                 
-                // PERBAIKAN: Gunakan field tahun yang benar
                 $padData[] = (int) Penerimaan::whereIn('kode_rekening_id', $padIds)
-                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->where('tahun', $selectedYear)
                     ->whereMonth('tanggal', $i)
                     ->filterBySkpd()
                     ->sum('jumlah');
@@ -340,9 +396,8 @@ class Dashboard extends Component
                 $transferIds = $this->getAllChildIds($transferKode->id);
                 $transferIds[] = $transferKode->id;
                 
-                // PERBAIKAN: Gunakan field tahun yang benar
                 $transferData[] = (int) Penerimaan::whereIn('kode_rekening_id', $transferIds)
-                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->where('tahun', $selectedYear)
                     ->whereMonth('tanggal', $i)
                     ->filterBySkpd()
                     ->sum('jumlah');
@@ -356,9 +411,8 @@ class Dashboard extends Component
                 $lainLainIds = $this->getAllChildIds($lainLainKode->id);
                 $lainLainIds[] = $lainLainKode->id;
                 
-                // PERBAIKAN: Gunakan field tahun yang benar
                 $lainLainData[] = (int) Penerimaan::whereIn('kode_rekening_id', $lainLainIds)
-                    ->where('tahun', $selectedYear)  // Filter by tahun field
+                    ->where('tahun', $selectedYear)
                     ->whereMonth('tanggal', $i)
                     ->filterBySkpd()
                     ->sum('jumlah');
