@@ -25,16 +25,18 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
     protected $tanggalAwal;
     protected $tanggalAkhir;
     protected $skpdId;
+    protected $allowedKodeRekeningIds; // NEW: Filter by kode rekening
     protected $data = [];
     protected $rowNumber = 0;
     protected $summaryData = [];
 
-    public function __construct($tahun, $tanggalAwal = null, $tanggalAkhir = null, $skpdId = null)
+    public function __construct($tahun, $tanggalAwal = null, $tanggalAkhir = null, $skpdId = null, $allowedKodeRekeningIds = [])
     {
         $this->tahun = $tahun;
         $this->tanggalAwal = $tanggalAwal;
         $this->tanggalAkhir = $tanggalAkhir;
         $this->skpdId = $skpdId;
+        $this->allowedKodeRekeningIds = $allowedKodeRekeningIds;
         $this->loadData();
     }
 
@@ -56,9 +58,15 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
         ];
         
         // Get all kode rekening - HANYA PENDAPATAN (kode 4.x.x)
-        $kodeRekenings = KodeRekening::where('is_active', 1)
-            ->where('kode', 'LIKE', '4%')
-            ->orderByRaw("
+        $query = KodeRekening::where('is_active', 1)
+            ->where('kode', 'LIKE', '4%');
+        
+        // NEW: Apply filter by allowed kode rekening IDs
+        if (!empty($this->allowedKodeRekeningIds)) {
+            $query->whereIn('id', $this->allowedKodeRekeningIds);
+        }
+        
+        $kodeRekenings = $query->orderByRaw("
                 CAST(SUBSTRING_INDEX(kode, '.', 1) AS UNSIGNED),
                 CAST(IFNULL(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(kode, '.', 2), '.', -1), SUBSTRING_INDEX(kode, '.', 1)), '0') AS UNSIGNED),
                 CAST(IFNULL(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(kode, '.', 3), '.', -1), SUBSTRING_INDEX(kode, '.', 2)), '0') AS UNSIGNED),
@@ -117,6 +125,11 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                 // Level 1-5: Aggregate
                 $childrenIds = $this->getLevel6Descendants($kode);
                 
+                // NEW: Filter children by allowed IDs
+                if (!empty($this->allowedKodeRekeningIds)) {
+                    $childrenIds = array_intersect($childrenIds, $this->allowedKodeRekeningIds);
+                }
+                
                 if (!empty($childrenIds)) {
                     if ($tahunAnggaranId) {
                         $target = TargetAnggaran::whereIn('kode_rekening_id', $childrenIds)
@@ -157,9 +170,9 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                 }
             }
             
-            // PERBAIKAN: Skip jika semua nilai 0 (tidak ada transaksi)
+            // Skip jika semua nilai 0 (tidak ada transaksi)
             if ($target == 0 && $realisasi == 0 && $realisasiLalu == 0) {
-                continue; // Skip this row
+                continue;
             }
             
             // Update summary untuk level 1
@@ -214,10 +227,15 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
         $periode = $this->tanggalAwal && $this->tanggalAkhir 
             ? date('d F Y', strtotime($this->tanggalAwal)) . ' Sampai ' . date('d F Y', strtotime($this->tanggalAkhir))
             : '01 Januari ' . $this->tahun . ' Sampai 31 Desember ' . $this->tahun;
+        
+        // NEW: Tentukan label berdasarkan filter
+        $label = !empty($this->allowedKodeRekeningIds) && $this->skpdId 
+            ? 'PER SKPD' 
+            : 'KONSOLIDASI';
             
         return [
             ['PEMERINTAH KOTA BANJARMASIN'],
-            ['LAPORAN REALISASI ANGGARAN PENDAPATAN DAN BELANJA DAERAH (KONSOLIDASI)'],
+            ['LAPORAN REALISASI ANGGARAN PENDAPATAN DAN BELANJA DAERAH (' . $label . ')'],
             ['TAHUN ANGGARAN ' . $this->tahun],
             [$periode],
             [''],
@@ -282,19 +300,19 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
         $sheet->mergeCells('A3:F3');
         $sheet->mergeCells('A4:F4');
         
-        // PERBAIKAN: Merge cells untuk header kolom tabel
-        $sheet->mergeCells('A6:A7'); // Kode Rekening
-        $sheet->mergeCells('B6:B7'); // URAIAN  
-        $sheet->mergeCells('C6:C7'); // ANGGARAN
-        $sheet->mergeCells('D6:D7'); // REALISASI
-        $sheet->mergeCells('E6:E7'); // %
-        $sheet->mergeCells('F6:F7'); // REALISASI tahun lalu
+        // Merge cells untuk header kolom tabel
+        $sheet->mergeCells('A6:A7');
+        $sheet->mergeCells('B6:B7');
+        $sheet->mergeCells('C6:C7');
+        $sheet->mergeCells('D6:D7');
+        $sheet->mergeCells('E6:E7');
+        $sheet->mergeCells('F6:F7');
         
         // Center alignment untuk header
         $sheet->getStyle('A1:F4')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle('A1:F3')->getFont()->setBold(true);
         
-        // Header tabel - apply to rows 6-8
+        // Header tabel
         $sheet->getStyle('A6:F8')->applyFromArray([
             'font' => ['bold' => true],
             'alignment' => [
@@ -321,59 +339,52 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
     }
 
     public function registerEvents(): array
-{
-    return [
-        AfterSheet::class => function(AfterSheet $event) {
-            $sheet = $event->sheet->getDelegate();
-            
-            // Process each data row
-            foreach ($this->data as $index => $row) {
-                $rowNumber = $index + 9; // Starting from row 9
+    {
+        return [
+            AfterSheet::class => function(AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
                 
-                if ($row['level'] <= 2) {
-                    // Bold untuk level 1 dan 2
-                    $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
-                        ->getFont()->setBold(true);
+                // Process each data row
+                foreach ($this->data as $index => $row) {
+                    $rowNumber = $index + 9;
                     
-                    // PERBAIKAN: Set alignment untuk kolom URAIAN (kolom B) ke kiri
+                    if ($row['level'] <= 2) {
+                        $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
+                            ->getFont()->setBold(true);
+                        
+                        $sheet->getStyle('B' . $rowNumber)
+                            ->getAlignment()
+                            ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                    }
+                    
+                    if ($row['level'] == 1) {
+                        $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
+                            ->getFill()
+                            ->setFillType(Fill::FILL_SOLID)
+                            ->getStartColor()->setRGB('E8F4F8');
+                    }
+                    
                     $sheet->getStyle('B' . $rowNumber)
                         ->getAlignment()
                         ->setHorizontal(Alignment::HORIZONTAL_LEFT);
-                }
-                
-                if ($row['level'] == 1) {
-                    // Background untuk level 1
-                    $sheet->getStyle('A' . $rowNumber . ':F' . $rowNumber)
-                        ->getFill()
-                        ->setFillType(Fill::FILL_SOLID)
-                        ->getStartColor()->setRGB('E8F4F8');
-                }
-                
-                // TAMBAHAN: Set alignment untuk semua level di kolom B (URAIAN)
-                $sheet->getStyle('B' . $rowNumber)
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
-                
-                // Set alignment untuk kolom KODE (A) - rata kiri juga
-                $sheet->getStyle('A' . $rowNumber)
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_LEFT);
-                
-                // Set alignment untuk kolom angka (C, D, F) - rata kanan
-                $sheet->getStyle('C' . $rowNumber . ':D' . $rowNumber)
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     
-                $sheet->getStyle('F' . $rowNumber)
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    $sheet->getStyle('A' . $rowNumber)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_LEFT);
                     
-                // Set alignment untuk kolom persentase (E) - rata tengah
-                $sheet->getStyle('E' . $rowNumber)
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle('C' . $rowNumber . ':D' . $rowNumber)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                        
+                    $sheet->getStyle('F' . $rowNumber)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                        
+                    $sheet->getStyle('E' . $rowNumber)
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                }
             }
-        }
-    ];
-}
+        ];
+    }
 }

@@ -420,66 +420,122 @@ class Index extends Component
     /**
      * Export Laporan Realisasi Anggaran
      */
-    public function exportLaporanRealisasi()
-    {
-        try {
-            $tahun = $this->tahun;
-            $tanggalAwal = $this->tanggalMulai;
-            $tanggalAkhir = $this->tanggalSelesai;
+   public function exportLaporanRealisasi()
+{
+    try {
+        $tahun = $this->tahun;
+        $tanggalAwal = $this->tanggalMulai;
+        $tanggalAkhir = $this->tanggalSelesai;
+        
+        if (!$tahun) {
+            session()->flash('error', 'Silakan pilih tahun terlebih dahulu untuk export LRA');
+            return;
+        }
+        
+        $tanggalAwal = $tanggalAwal ?: "{$tahun}-01-01";
+        $tanggalAkhir = $tanggalAkhir ?: "{$tahun}-12-31";
+        
+        $filename = 'LRA_' . $tahun;
+        
+        $skpdId = null;
+        $allowedKodeRekeningIds = []; // Array untuk filter kode rekening
+        $user = auth()->user();
+        
+        if ($user->skpd_id && !$user->canViewAllSkpd()) {
+            // Operator SKPD - filter by assigned kode rekening
+            $skpdId = $user->skpd_id;
             
-            if (!$tahun) {
-                session()->flash('error', 'Silakan pilih tahun terlebih dahulu untuk export LRA');
-                return;
+            // Get kode rekening level 6 yang di-assign ke SKPD
+            if ($user->skpd) {
+                $allowedKodeRekeningIds = $user->skpd->getLevel6KodeRekeningIds();
+                
+                // Get all hierarchical IDs (including parents)
+                $allowedKodeRekeningIds = $this->getHierarchicalKodeRekeningIds($allowedKodeRekeningIds);
             }
             
-            $tanggalAwal = $tanggalAwal ?: "{$tahun}-01-01";
-            $tanggalAkhir = $tanggalAkhir ?: "{$tahun}-12-31";
+            if ($user->skpd && $user->skpd->kode_opd) {
+                $filename .= '_' . str_replace([' ', '/'], '_', $user->skpd->kode_opd);
+            }
             
-            $filename = 'LRA_' . $tahun;
+        } elseif ($this->selectedSkpdId && $user->canViewAllSkpd()) {
+            // Super Admin/Kepala Badan yang pilih SKPD tertentu
+            $skpdId = $this->selectedSkpdId;
+            $skpd = Skpd::find($this->selectedSkpdId);
             
-            $skpdId = null;
-            $user = auth()->user();
-            
-            if ($user->skpd_id && !$user->canViewAllSkpd()) {
-                $skpdId = $user->skpd_id;
-                if ($user->skpd && $user->skpd->kode_opd) {
-                    $filename .= '_' . str_replace([' ', '/'], '_', $user->skpd->kode_opd);
-                }
-            } elseif ($this->selectedSkpdId) {
-                $skpdId = $this->selectedSkpdId;
-                $skpd = Skpd::find($this->selectedSkpdId);
-                if ($skpd && $skpd->kode_opd) {
+            if ($skpd) {
+                // Get kode rekening yang di-assign ke SKPD yang dipilih
+                $allowedKodeRekeningIds = $skpd->getLevel6KodeRekeningIds();
+                
+                // Get all hierarchical IDs
+                $allowedKodeRekeningIds = $this->getHierarchicalKodeRekeningIds($allowedKodeRekeningIds);
+                
+                if ($skpd->kode_opd) {
                     $filename .= '_' . str_replace([' ', '/'], '_', $skpd->kode_opd);
                 }
-            } else {
-                $filename .= '_KONSOLIDASI';
             }
-            
-            $filename .= '_' . date('YmdHis') . '.xlsx';
-            
-            Log::info('Export LRA', [
-                'user' => $user->name,
-                'tahun' => $tahun,
-                'tanggal_awal' => $tanggalAwal,
-                'tanggal_akhir' => $tanggalAkhir,
-                'skpd_id' => $skpdId,
-                'filename' => $filename
-            ]);
-            
-            return Excel::download(
-                new LaporanRealisasiExport($tahun, $tanggalAwal, $tanggalAkhir, $skpdId),
-                $filename
-            );
-            
-        } catch (\Exception $e) {
-            Log::error('Export LRA Error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            session()->flash('error', 'Gagal export laporan: ' . $e->getMessage());
-            return redirect()->back();
+        } else {
+            // Konsolidasi semua SKPD - no filter
+            $filename .= '_KONSOLIDASI';
+        }
+        
+        $filename .= '_' . date('YmdHis') . '.xlsx';
+        
+        Log::info('Export LRA', [
+            'user' => $user->name,
+            'tahun' => $tahun,
+            'tanggal_awal' => $tanggalAwal,
+            'tanggal_akhir' => $tanggalAkhir,
+            'skpd_id' => $skpdId,
+            'allowed_kode_count' => count($allowedKodeRekeningIds),
+            'filename' => $filename
+        ]);
+        
+        // Pass kode rekening IDs ke export class
+        return Excel::download(
+            new LaporanRealisasiExport($tahun, $tanggalAwal, $tanggalAkhir, $skpdId, $allowedKodeRekeningIds),
+            $filename
+        );
+        
+    } catch (\Exception $e) {
+        Log::error('Export LRA Error', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        session()->flash('error', 'Gagal export laporan: ' . $e->getMessage());
+        return redirect()->back();
+    }
+}
+
+/**
+ * Helper method untuk get hierarchical kode rekening IDs
+ * Dari level 6 IDs, dapatkan semua parent hingga level 1
+ */
+private function getHierarchicalKodeRekeningIds($level6Ids)
+{
+    if (empty($level6Ids)) {
+        return [];
+    }
+    
+    $allIds = [];
+    
+    // Get level 6 kode rekening
+    $level6Kodes = KodeRekening::whereIn('id', $level6Ids)->get();
+    
+    foreach ($level6Kodes as $kode) {
+        // Add level 6 itself
+        $allIds[] = $kode->id;
+        
+        // Traverse up to get all parents
+        $current = $kode;
+        while ($current->parent_id) {
+            $allIds[] = $current->parent_id;
+            $current = KodeRekening::find($current->parent_id);
+            if (!$current) break;
         }
     }
+    
+    return array_unique($allIds);
+}
 
   // ==========================================
 // DELETE METHOD
