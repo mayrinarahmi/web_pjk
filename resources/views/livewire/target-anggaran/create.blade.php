@@ -7,17 +7,27 @@
             </a>
         </div>
         <div class="card-body">
-            <!-- Info penting -->
+            {{-- ================================================ --}}
+            {{-- USER INFO & SKPD INFO - TAMBAHAN BARU ✅ --}}
+            {{-- ================================================ --}}
+            @if($userSkpdInfo)
+            <div class="alert {{ $showSkpdDropdown ? 'alert-info' : 'alert-warning' }} py-2">
+                <i class="bx bx-info-circle"></i> {{ $userSkpdInfo }}
+            </div>
+            @endif
+            
+            {{-- Info penting --}}
             <div class="alert alert-info">
                 <h6><i class="bx bx-info-circle"></i> Informasi Target Anggaran:</h6>
                 <ul class="mb-0">
-                    <li><strong>Level 5:</strong> Input manual target anggaran detail</li>
-                    <li><strong>Level 1-4:</strong> Otomatis dihitung dari SUM children setelah menyimpan</li>
+                    <li><strong>Level 6:</strong> Input manual target anggaran per SKPD</li>
+                    <li><strong>Level 1-5:</strong> Otomatis dihitung dari SUM children setelah menyimpan</li>
+                    <li><strong>Konsolidasi:</strong> Total dari semua SKPD dihitung otomatis</li>
                     <li><strong>Hierarki:</strong> Target parent akan diperbarui otomatis</li>
                 </ul>
             </div>
             
-            <!-- Feedback messages -->
+            {{-- Feedback messages --}}
             @if(session()->has('message'))
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     {{ session('message') }}
@@ -41,6 +51,28 @@
             
             <form wire:submit.prevent="save">
                 <div class="row">
+                    {{-- ================================================ --}}
+                    {{-- SKPD SELECTOR - TAMBAHAN BARU ✅ --}}
+                    {{-- ================================================ --}}
+                    @if($showSkpdDropdown)
+                    <div class="col-md-12 mb-3">
+                        <label for="selectedSkpdId" class="form-label">SKPD <span class="text-danger">*</span></label>
+                        <select class="form-select @error('selectedSkpdId') is-invalid @enderror" 
+                            id="selectedSkpdId" wire:model.live="selectedSkpdId">
+                            <option value="">Pilih SKPD</option>
+                            @foreach($skpdList as $skpd)
+                                <option value="{{ $skpd->id }}">{{ $skpd->nama_opd }}</option>
+                            @endforeach
+                        </select>
+                        @error('selectedSkpdId')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">
+                            <i class="bx bx-building"></i> Pilih SKPD yang akan diinput target anggarannya
+                        </div>
+                    </div>
+                    @endif
+                    
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="tahunAnggaranId" class="form-label">Tahun Anggaran <span class="text-danger">*</span></label>
@@ -91,10 +123,10 @@
                 </div>
                 
                 <div class="mb-3">
-                    <label for="kodeRekeningId" class="form-label">Kode Rekening Level 5 <span class="text-danger">*</span></label>
+                    <label for="kodeRekeningId" class="form-label">Kode Rekening Level 6 <span class="text-danger">*</span></label>
                     <select class="form-select @error('kodeRekeningId') is-invalid @enderror" 
                         id="kodeRekeningId" wire:model.live="kodeRekeningId">
-                        <option value="">Pilih Kode Rekening Level 5</option>
+                        <option value="">Pilih Kode Rekening Level 6</option>
                         @foreach($kodeRekening as $kr)
                             <option value="{{ $kr->id }}">{{ $kr->kode }} - {{ $kr->nama }}</option>
                         @endforeach
@@ -103,11 +135,22 @@
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                     <div class="form-text">
-                        <i class="bx bx-list-ol"></i> Hanya kode rekening level 5 (rincian objek) yang dapat diinput manual
+                        <i class="bx bx-list-ol"></i> Hanya kode rekening <strong>Level 6</strong> (sub rincian objek) yang dapat diinput manual
                     </div>
+                    
+                    @if($kodeRekening->isEmpty())
+                        <div class="alert alert-warning mt-2 py-2">
+                            <i class="bx bx-error"></i> 
+                            @if($showSkpdDropdown && !$selectedSkpdId)
+                                Silakan pilih SKPD terlebih dahulu untuk melihat kode rekening yang tersedia.
+                            @else
+                                Tidak ada kode rekening Level 6 yang tersedia untuk SKPD ini. Hubungi administrator untuk assignment.
+                            @endif
+                        </div>
+                    @endif
                 </div>
                 
-                <!-- Tampilkan hierarki path jika kode rekening dipilih -->
+                {{-- Tampilkan hierarki path jika kode rekening dipilih --}}
                 @if($kodeRekeningId)
                     @php
                         $selectedKode = $kodeRekening->where('id', $kodeRekeningId)->first();
@@ -146,7 +189,7 @@
                         @enderror
                     </div>
                     
-                    <!-- Format preview -->
+                    {{-- Format preview --}}
                     @if($jumlah > 0)
                         <div class="form-text text-success">
                             <i class="bx bx-money"></i> 
@@ -155,7 +198,7 @@
                     @endif
                 </div>
                 
-                <!-- Preview dampak hierarki -->
+                {{-- Preview dampak hierarki --}}
                 @if($jumlah > 0 && $kodeRekeningId)
                     @php
                         $selectedKode = $kodeRekening->where('id', $kodeRekeningId)->first();
@@ -193,7 +236,10 @@
                 @endif
                 
                 <div class="text-end">
-                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
+                    <button type="submit" 
+                            class="btn btn-primary" 
+                            wire:loading.attr="disabled"
+                            @if($kodeRekening->isEmpty()) disabled @endif>
                         <span wire:loading.remove>
                             <i class="bx bx-save"></i> Simpan Target Anggaran
                         </span>
@@ -207,15 +253,18 @@
         </div>
     </div>
     
-    <!-- Bantuan penggunaan -->
+    {{-- Bantuan penggunaan --}}
     <div class="card mt-3">
         <div class="card-body">
             <h6><i class="bx bx-help-circle"></i> Cara Penggunaan:</h6>
             <div class="row">
                 <div class="col-md-6">
                     <ol>
+                        @if($showSkpdDropdown)
+                        <li>Pilih <strong>SKPD</strong> yang akan diinput</li>
+                        @endif
                         <li>Pilih <strong>Tahun Anggaran</strong> yang akan diinput</li>
-                        <li>Pilih <strong>Kode Rekening Level 5</strong> (rincian objek)</li>
+                        <li>Pilih <strong>Kode Rekening Level 6</strong> (sub rincian objek)</li>
                         <li>Masukkan <strong>Target Anggaran</strong> dalam rupiah</li>
                         <li>Klik <strong>Simpan</strong> untuk menyimpan dan update hierarki</li>
                     </ol>
@@ -223,10 +272,11 @@
                 <div class="col-md-6">
                     <h6>Catatan Penting:</h6>
                     <ul>
-                        <li>Hanya level 5 yang bisa diinput manual</li>
-                        <li>Level 1-4 otomatis dihitung dari children</li>
+                        <li>Hanya <strong>Level 6</strong> yang bisa diinput manual</li>
+                        <li>Level 1-5 otomatis dihitung dari children</li>
                         <li>Target yang sudah ada akan di-update</li>
                         <li>Hierarki parent diperbarui otomatis</li>
+                        <li>Data tersimpan <strong>per SKPD</strong></li>
                     </ul>
                 </div>
             </div>

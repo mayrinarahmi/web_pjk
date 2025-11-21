@@ -1462,4 +1462,274 @@ class TrendAnalysisService
         
         return $months[$month] ?? '';
     }
+
+    /**
+     * ✨ NEW: Get monthly detail summary for drill-down cards
+     * 
+     * @param string|int $categoryId - ID kategori
+     * @param int $year - Tahun yang dipilih
+     * @return array|null
+     */
+    public function getMonthlySummary($categoryId, $year)
+    {
+        $cacheKey = "monthly_summary_{$categoryId}_{$year}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($categoryId, $year) {
+            
+            // Get category info
+            $category = KodeRekening::find($categoryId);
+            if (!$category) {
+                Log::warning("Category not found for getMonthlySummary", ['categoryId' => $categoryId]);
+                return null;
+            }
+            
+            Log::info("Getting monthly summary", [
+                'categoryId' => $categoryId,
+                'year' => $year,
+                'level' => $category->level
+            ]);
+            
+            // Query monthly data
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.bulan',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.tahun', $year)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            // Apply filtering based on level
+            if (in_array($category->level, [3, 4, 5])) {
+                // Aggregate Level 6 descendants
+                $descendantIds = $this->getDescendantLevel6Ids($categoryId, $category->level);
+                
+                Log::info("Aggregating descendants", [
+                    'level' => $category->level,
+                    'descendant_count' => count($descendantIds)
+                ]);
+                
+                if (!empty($descendantIds)) {
+                    $query->whereIn('vm.kode_rekening_id', $descendantIds);
+                } else {
+                    Log::warning("No descendants found", ['categoryId' => $categoryId]);
+                    return null;
+                }
+            } else if ($category->level == 6) {
+                // Direct Level 6
+                $query->where('vm.kode_rekening_id', $categoryId);
+            } else {
+                // Level 1, 2 - use parent_id
+                $query->where('vm.parent_id', $categoryId);
+            }
+            
+            $monthlyData = $query->groupBy('vm.bulan')
+                                 ->orderBy('vm.bulan')
+                                 ->get();
+            
+            if ($monthlyData->isEmpty()) {
+                Log::warning("No monthly data found", [
+                    'categoryId' => $categoryId,
+                    'year' => $year
+                ]);
+                return null;
+            }
+            
+            // Calculate statistics
+            $monthlyTotals = [];
+            $total = 0;
+            
+            foreach ($monthlyData as $row) {
+                $monthlyTotals[$row->bulan] = (float)$row->total;
+                $total += (float)$row->total;
+            }
+            
+            $monthCount = count($monthlyTotals);
+            $avgMonthly = $monthCount > 0 ? $total / $monthCount : 0;
+            
+            // Find peak and lowest month
+            if (!empty($monthlyTotals)) {
+                $maxValue = max($monthlyTotals);
+                $minValue = min($monthlyTotals);
+                $peakMonth = array_search($maxValue, $monthlyTotals);
+                $lowestMonth = array_search($minValue, $monthlyTotals);
+            } else {
+                $peakMonth = null;
+                $lowestMonth = null;
+            }
+            
+            // Calculate monthly growth (first month to last month)
+            $monthNumbers = array_keys($monthlyTotals);
+            $firstMonth = min($monthNumbers);
+            $lastMonth = max($monthNumbers);
+            
+            $firstMonthValue = $monthlyTotals[$firstMonth] ?? 0;
+            $lastMonthValue = $monthlyTotals[$lastMonth] ?? 0;
+            $monthlyGrowth = 0;
+            
+            if ($firstMonthValue > 0 && $lastMonthValue > 0 && count($monthlyTotals) > 1) {
+                $monthlyGrowth = (($lastMonthValue - $firstMonthValue) / $firstMonthValue) * 100;
+            }
+            
+            // Determine trend direction
+            $trendDirection = 'stable';
+            if ($monthlyGrowth > 5) {
+                $trendDirection = 'increasing';
+            } else if ($monthlyGrowth < -5) {
+                $trendDirection = 'decreasing';
+            }
+            
+            $result = [
+                'year' => $year,
+                'categoryInfo' => [
+                    'id' => $category->id,
+                    'kode' => $category->kode,
+                    'nama' => $category->nama,
+                    'level' => $category->level
+                ],
+                'total' => $total,
+                'avgMonthly' => $avgMonthly,
+                'peakMonth' => [
+                    'month' => $peakMonth,
+                    'name' => $peakMonth ? $this->getMonthName($peakMonth) : '-',
+                    'value' => $peakMonth ? ($monthlyTotals[$peakMonth] ?? 0) : 0
+                ],
+                'lowestMonth' => [
+                    'month' => $lowestMonth,
+                    'name' => $lowestMonth ? $this->getMonthName($lowestMonth) : '-',
+                    'value' => $lowestMonth ? ($monthlyTotals[$lowestMonth] ?? 0) : 0
+                ],
+                'monthlyGrowth' => round($monthlyGrowth, 2),
+                'trendDirection' => $trendDirection,
+                'monthlyTotals' => $monthlyTotals,
+                'monthCount' => $monthCount
+            ];
+            
+            Log::info("Monthly summary calculated", [
+                'total' => $total,
+                'avgMonthly' => $avgMonthly,
+                'monthCount' => $monthCount
+            ]);
+            
+            return $result;
+        });
+    }
+
+    /**
+     * ✨ NEW: Get monthly growth table data for drill-down
+     * 
+     * @param string|int $categoryId
+     * @param int $year
+     * @return array
+     */
+    public function getMonthlyGrowthTable($categoryId, $year)
+    {
+        $cacheKey = "monthly_growth_table_{$categoryId}_{$year}";
+        
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($categoryId, $year) {
+            
+            $category = KodeRekening::find($categoryId);
+            if (!$category) {
+                Log::warning("Category not found for getMonthlyGrowthTable", ['categoryId' => $categoryId]);
+                return [];
+            }
+            
+            // Query monthly data
+            $query = DB::table('v_penerimaan_monthly as vm')
+                ->select(
+                    'vm.bulan',
+                    DB::raw('SUM(vm.jumlah) as total')
+                )
+                ->where('vm.tahun', $year)
+                ->whereNotNull('vm.jumlah')
+                ->where('vm.jumlah', '>', 0);
+            
+            // Apply filtering based on level
+            if (in_array($category->level, [3, 4, 5])) {
+                $descendantIds = $this->getDescendantLevel6Ids($categoryId, $category->level);
+                if (!empty($descendantIds)) {
+                    $query->whereIn('vm.kode_rekening_id', $descendantIds);
+                } else {
+                    return [];
+                }
+            } else if ($category->level == 6) {
+                $query->where('vm.kode_rekening_id', $categoryId);
+            } else {
+                $query->where('vm.parent_id', $categoryId);
+            }
+            
+            $results = $query->groupBy('vm.bulan')
+                             ->orderBy('vm.bulan')
+                             ->get();
+            
+            if ($results->isEmpty()) {
+                Log::warning("No monthly data for growth table", [
+                    'categoryId' => $categoryId,
+                    'year' => $year
+                ]);
+                return [];
+            }
+            
+            // Build table data with month-over-month growth
+            $tableData = [];
+            $previousValue = null;
+            
+            foreach ($results as $row) {
+                $value = (float)$row->total;
+                $growth = 0;
+                $trend = 'stable';
+                $description = 'Bulan pertama';
+                
+                if ($previousValue !== null && $previousValue > 0) {
+                    $growth = (($value - $previousValue) / $previousValue) * 100;
+                    
+                    if ($growth > 0) {
+                        $trend = 'up';
+                        if ($growth > 20) {
+                            $description = 'Pertumbuhan sangat tinggi';
+                        } else if ($growth > 10) {
+                            $description = 'Pertumbuhan tinggi';
+                        } else if ($growth > 5) {
+                            $description = 'Pertumbuhan moderat';
+                        } else {
+                            $description = 'Pertumbuhan ringan';
+                        }
+                    } else if ($growth < 0) {
+                        $trend = 'down';
+                        if ($growth < -20) {
+                            $description = 'Penurunan drastis';
+                        } else if ($growth < -10) {
+                            $description = 'Penurunan signifikan';
+                        } else if ($growth < -5) {
+                            $description = 'Penurunan moderat';
+                        } else {
+                            $description = 'Penurunan ringan';
+                        }
+                    } else {
+                        $trend = 'stable';
+                        $description = 'Tidak ada perubahan';
+                    }
+                }
+                
+                $tableData[] = [
+                    'month' => $row->bulan,
+                    'monthName' => $this->getMonthName($row->bulan),
+                    'value' => $value,
+                    'growth' => round($growth, 2),
+                    'trend' => $trend,
+                    'description' => $description
+                ];
+                
+                $previousValue = $value;
+            }
+            
+            Log::info("Monthly growth table generated", [
+                'categoryId' => $categoryId,
+                'year' => $year,
+                'rows' => count($tableData)
+            ]);
+            
+            return $tableData;
+        });
+    }
 }

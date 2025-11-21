@@ -37,15 +37,16 @@
         @endcan
         @endif
 
-        <!-- Master Data - HIDDEN untuk Operator SKPD -->
+        <!-- Master Data - Header untuk semua yang punya permission -->
+        @if(auth()->user()->can('view-tahun-anggaran') || 
+            auth()->user()->can('view-kode-rekening') || 
+            auth()->user()->can('view-target'))
+        <li class="menu-header small text-uppercase">
+            <span class="menu-header-text">Master Data</span>
+        </li>
+        
+        <!-- Tahun Anggaran - Tidak untuk Operator SKPD -->
         @if(!auth()->user()->hasRole('Operator SKPD'))
-            @if(auth()->user()->can('view-tahun-anggaran') || 
-                auth()->user()->can('view-kode-rekening') || 
-                auth()->user()->can('view-target'))
-            <li class="menu-header small text-uppercase">
-                <span class="menu-header-text">Master Data</span>
-            </li>
-            
             @can('view-tahun-anggaran')
             <li class="menu-item {{ request()->routeIs('tahun-anggaran.*') ? 'active' : '' }}">
                 <a href="{{ route('tahun-anggaran.index') }}" class="menu-link">
@@ -54,7 +55,10 @@
                 </a>
             </li>
             @endcan
-            
+        @endif
+        
+        <!-- Kode Rekening - Tidak untuk Operator SKPD -->
+        @if(!auth()->user()->hasRole('Operator SKPD'))
             @can('view-kode-rekening')
             <li class="menu-item {{ request()->routeIs('kode-rekening.*') ? 'active' : '' }}">
                 <a href="{{ route('kode-rekening.index') }}" class="menu-link">
@@ -63,7 +67,10 @@
                 </a>
             </li>
             @endcan
+        @endif
 
+        <!-- Target Periode - Tidak untuk Operator SKPD -->
+        @if(!auth()->user()->hasRole('Operator SKPD'))
             @can('view-target')
             <li class="menu-item {{ request()->routeIs('target-periode.*') ? 'active' : '' }}">
                 <a href="{{ route('target-periode.index') }}" class="menu-link">
@@ -72,16 +79,17 @@
                 </a>
             </li>
             @endcan
-            
-            @can('view-target')
-            <li class="menu-item {{ request()->routeIs('target-anggaran.*') ? 'active' : '' }}">
-                <a href="{{ route('target-anggaran.index') }}" class="menu-link">
-                    <i class="menu-icon tf-icons bx bx-money"></i>
-                    <div>Pagu Anggaran</div>
-                </a>
-            </li>
-            @endcan
-            @endif
+        @endif
+        
+        <!-- ✅ PAGU ANGGARAN - SEMUA ROLE BISA AKSES (TERMASUK OPERATOR SKPD) -->
+        @can('view-target')
+        <li class="menu-item {{ request()->routeIs('target-anggaran.*') ? 'active' : '' }}">
+            <a href="{{ route('target-anggaran.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-money"></i>
+                <div>Pagu Anggaran</div>
+            </a>
+        </li>
+        @endcan
         @endif
 
         <!-- Transaksi - Semua kecuali Viewer -->
@@ -111,7 +119,6 @@
             </a>
         </li> -->
         @endcan
-    
 
         <!-- Pengaturan - Hanya Super Admin dan Operator (backward compatibility) -->
         @if(auth()->user()->hasRole(['Super Admin', 'Administrator', 'Operator']))
@@ -128,7 +135,6 @@
         </li>
         @endcan
         
-        
         @can('manage-skpd')
         <li class="menu-item {{ request()->routeIs('skpd.*') ? 'active' : '' }}">
             <a href="{{ route('skpd.index') }}" class="menu-link">
@@ -137,7 +143,6 @@
             </a>
         </li>
         @endcan
-        
         
         @can('manage-backup')
         <li class="menu-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">

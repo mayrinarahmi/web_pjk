@@ -5,11 +5,26 @@
 @section('content')
 <div class="container-fluid">
     <!-- Header -->
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <h4 class="page-title mb-1">Trend Analysis Penerimaan</h4>
-            <p class="text-muted mb-0">Analisis trend penerimaan daerah multi-tahun</p>
-        </div>
+   <div class="row mb-4">
+    <div class="col-md-8">
+        <!-- ✨ NEW: Breadcrumb Navigation -->
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="background: transparent; padding: 0;">
+                <li class="breadcrumb-item">
+                    <a href="#" onclick="resetToOverview(); return false;" style="color: #667eea; text-decoration: none;">
+                        <i class="bx bx-home-alt"></i> Overview
+                    </a>
+                </li>
+                <li class="breadcrumb-item" id="breadcrumbCategory" style="display:none;">
+                    <a href="#" onclick="backToCategory(); return false;" id="breadcrumbCategoryLink" style="color: #667eea; text-decoration: none;"></a>
+                </li>
+                <li class="breadcrumb-item active" id="breadcrumbYear" style="display:none;" aria-current="page"></li>
+            </ol>
+        </nav>
+        
+        <h4 class="page-title mb-1">Trend Analysis Penerimaan</h4>
+        <p class="text-muted mb-0">Analisis trend penerimaan daerah multi-tahun</p>
+    </div>
         <div class="col-md-4 text-end">
             <button class="btn btn-primary" id="searchModalBtn">
                 <i class="bx bx-search me-1"></i> Cari Kategori
@@ -98,6 +113,27 @@
 
                     <!-- Chart Container -->
                     <div id="trendChart"></div>
+                    
+                    <!-- ✨ NEW: Secondary Chart Container (Hidden by default) -->
+                    <div id="trendChartSecondary" style="display:none; margin-top:30px;">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                <div>
+                                    <h5 class="card-title mb-0">
+                                        <i class="bx bx-line-chart text-primary"></i>
+                                        Detail Bulanan <span id="selectedYearTitle" class="text-primary"></span>
+                                    </h5>
+                                    <small class="text-muted">Trend penerimaan per bulan</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="hideSecondaryChart()" title="Tutup detail">
+                                    <i class="bx bx-x"></i> Tutup
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="monthlyDetailChart"></div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <!-- Chart Actions -->
                    
@@ -232,12 +268,16 @@
         </div>
     </div>
 
-    <!-- Hidden inputs for state management -->
+<!-- Hidden inputs for state management -->
     <input type="hidden" id="currentCategoryId" value="">
     <input type="hidden" id="currentYearRange" value="3">
     <input type="hidden" id="currentView" value="yearly">
     <input type="hidden" id="currentMonth" value="{{ date('n') }}">
     <input type="hidden" id="yearRangeText" value="3">
+    
+    <!-- ✨ NEW: Drill-down state -->
+    <input type="hidden" id="selectedYear" value="">
+    <input type="hidden" id="isDrillDown" value="false">
 </div>
 
 <!-- Search Modal -->
@@ -848,6 +888,160 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
+
+
+#trendChartSecondary {
+    animation: slideInUp 0.5s ease-out;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#trendChartSecondary .card {
+    border: 2px solid #e3e6f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+#trendChartSecondary .card-header {
+    background: linear-gradient(135deg, #f8f9fc 0%, #eef2f7 100%);
+    border-bottom: 2px solid #e3e6f0;
+}
+
+/* Clickable bar indication */
+.apexcharts-bar-area.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.apexcharts-bar-area.clickable:hover {
+    filter: brightness(1.2);
+    stroke: #667eea;
+    stroke-width: 2px;
+}
+
+/* Highlighted bar (selected year) */
+.apexcharts-bar-area.highlighted {
+    filter: brightness(1.3);
+    stroke: #667eea;
+    stroke-width: 3px;
+    stroke-dasharray: 4;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Breadcrumb styling enhancements */
+.breadcrumb-item a {
+    color: #667eea;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.breadcrumb-item a:hover {
+    color: #764ba2;
+    text-decoration: underline;
+}
+
+.breadcrumb-item.active {
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    color: #adb5bd;
+    font-size: 1.2em;
+}
+
+/* Chart title badge for year */
+#selectedYearTitle {
+    font-size: 1.1em;
+    font-weight: 700;
+}
+
+/* Secondary chart container loading state */
+#trendChartSecondary .card-body {
+    min-height: 400px;
+    position: relative;
+}
+
+#monthlyDetailChart {
+    min-height: 380px;
+}
+
+/* Tooltip for clickable bars */
+.chart-bar-tooltip {
+    position: absolute;
+    background: rgba(102, 126, 234, 0.95);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chart-bar-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid rgba(102, 126, 234, 0.95);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #trendChartSecondary {
+        margin-top: 20px;
+    }
+    
+    #trendChartSecondary .card-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    #trendChartSecondary .card-header button {
+        margin-top: 10px;
+        width: 100%;
+    }
+    
+    .breadcrumb {
+        font-size: 0.85em;
+    }
+}
+
+/* Print styles */
+@media print {
+    #trendChartSecondary .card-header button {
+        display: none !important;
+    }
+    
+    .breadcrumb {
+        display: none !important;
+    }
+}
 </style>
 @endpush
 
@@ -1086,7 +1280,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 table.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         });
-    });
+
 });
 
  setTimeout(function() {
@@ -1109,4 +1303,79 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 1000);
 </script>
+
+<script>
+// FORCE RE-INIT SEARCH BUTTON
+(function() {
+    'use strict';
+    
+    function initSearchButton() {
+        console.log('🔧 Force initializing search button...');
+        
+        const searchBtn = document.getElementById('searchModalBtn');
+        const modalEl = document.getElementById('searchModal');
+        
+        if (!searchBtn || !modalEl) {
+            console.error('❌ Button or modal not found');
+            setTimeout(initSearchButton, 500);
+            return;
+        }
+        
+        console.log('✅ Found button and modal');
+        
+        // Remove ALL existing event listeners by cloning
+        const newBtn = searchBtn.cloneNode(true);
+        searchBtn.parentNode.replaceChild(newBtn, searchBtn);
+        
+        // Add fresh click handler
+        newBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔘 Search button clicked!');
+            
+            try {
+                if (typeof bootstrap === 'undefined') {
+                    console.error('❌ Bootstrap not loaded');
+                    return;
+                }
+                
+                const modal = new bootstrap.Modal(modalEl, {
+                    backdrop: true,
+                    keyboard: true,
+                    focus: true
+                });
+                
+                modal.show();
+                console.log('✅ Modal shown');
+                
+                // Focus search input when modal opens
+                modalEl.addEventListener('shown.bs.modal', function() {
+                    const searchInput = document.getElementById('searchInput');
+                    if (searchInput) {
+                        searchInput.focus();
+                        console.log('✅ Search input focused');
+                    }
+                }, { once: true });
+                
+            } catch (error) {
+                console.error('❌ Error showing modal:', error);
+            }
+        };
+        
+        console.log('✅ Search button handler attached');
+    }
+    
+    // Initialize on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initSearchButton, 1000);
+        });
+    } else {
+        setTimeout(initSearchButton, 1000);
+    }
+})();
+</script>
+
+
+
 @endpush

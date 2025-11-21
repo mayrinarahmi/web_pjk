@@ -13,6 +13,7 @@ if (typeof ApexCharts === 'undefined') {
 // ========================================
 
 let chart = null;
+let chartSecondary = null; // ✨ NEW: Secondary chart instance
 let searchTimeout = null;
 let searchModal = null;
 
@@ -30,7 +31,9 @@ const appState = {
     categoryId: '',
     categoryName: '',
     categoryLevel: null,
-    isLoading: false
+    isLoading: false,
+    selectedYear: null,        // ✨ NEW: Year selected for drill-down
+    isDrillDown: false         // ✨ NEW: Drill-down mode flag
 };
 
 // Previous state untuk comparison
@@ -42,6 +45,7 @@ const API_OVERVIEW = `${API_BASE}/overview`;
 const API_CATEGORY = `${API_BASE}/category`;
 const API_SEARCH = `${API_BASE}/search`;
 const API_CLEAR_CACHE = `${API_BASE}/clear-cache`;
+const API_MONTHLY_DETAIL = `${API_BASE}/category`; // ✨ NEW: Will be used as /category/{id}/monthly/{year}
 
 // ========================================
 // INITIALIZATION
@@ -216,6 +220,9 @@ function syncUIWithState() {
     if (resetBtn) {
         resetBtn.style.display = appState.categoryId ? 'inline-block' : 'none';
     }
+
+    // ✨ NEW: Update breadcrumb visibility
+    updateBreadcrumb();
 }
 
 /**
@@ -538,13 +545,19 @@ function renderYearlyChart(data) {
     const options = {
         series: data.series || [],
         chart: {
-            type: 'bar', // Always bar for yearly
+            type: 'bar',
             height: 450,
             stacked: false,
             animations: {
                 enabled: true,
                 easing: 'easeinout',
                 speed: 800
+            },
+            // ✨ NEW: Click handler for drill-down
+            events: {
+                dataPointSelection: function(event, chartContext, config) {
+                    handleBarClick(config.dataPointIndex);
+                }
             },
             toolbar: {
                 show: true,
@@ -1498,6 +1511,437 @@ async function clearCache() {
         alert('Error: ' + error.message);
     }
 }
+
+
+function handleBarClick(yearIndex) {
+    console.log('Bar clicked at index:', yearIndex);
+    
+    // Only allow drill-down when category is selected
+    if (!appState.categoryId) {
+        console.log('No category selected, ignoring click');
+        return;
+    }
+    
+    // Prevent drill-down in monthly view
+    if (appState.view === 'monthly') {
+        console.log('Already in monthly view, ignoring click');
+        return;
+    }
+    
+    // Get the year from categories
+    const chartContainer = document.querySelector("#trendChart");
+    if (!chart || !chart.w || !chart.w.config || !chart.w.config.xaxis) {
+        console.error('Chart not properly initialized');
+        return;
+    }
+    
+    const categories = chart.w.config.xaxis.categories;
+    if (!categories || yearIndex >= categories.length) {
+        console.error('Invalid year index');
+        return;
+    }
+    
+    const selectedYear = parseInt(categories[yearIndex]);
+    
+    console.log('Year selected for drill-down:', selectedYear);
+    
+    // Update state
+    updateState({
+        selectedYear: selectedYear,
+        isDrillDown: true
+    }, false); // Don't reload main chart
+    
+    // Load monthly detail
+    loadMonthlyDetail(appState.categoryId, selectedYear);
+    
+    // Highlight selected bar
+    highlightSelectedBar(yearIndex);
+}
+
+async function loadMonthlyDetail(categoryId, year) {
+    console.log('Loading monthly detail:', { categoryId, year });
+    
+    try {
+        setLoadingState(true);
+        
+        const url = `${API_MONTHLY_DETAIL}/${categoryId}/monthly/${year}`;
+        console.log('Fetching from:', url);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('Monthly detail response:', result);
+        
+        if (result.success && result.data) {
+            renderMonthlyDetailChart(result.data);
+            
+            if (result.data.summary) {
+                updateMonthlyCards(result.data.summary);
+            }
+            
+            if (result.data.tableData) {
+                updateMonthlyTable(result.data.tableData);
+            }
+            
+            showSecondaryChart();
+            
+            const yearTitle = document.getElementById('selectedYearTitle');
+            if (yearTitle) {
+                yearTitle.textContent = year;
+            }
+            
+        } else {
+            showError(result.message || 'Gagal memuat data monthly detail');
+        }
+        
+    } catch (error) {
+        console.error('Error loading monthly detail:', error);
+        showError('Terjadi kesalahan: ' + error.message);
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+/**
+ * Render monthly detail chart (line chart)
+ */
+function renderMonthlyDetailChart(data) {
+    console.log('Rendering monthly detail chart:', data);
+    
+    // Destroy existing secondary chart
+    destroySecondaryChart();
+    
+    const chartContainer = document.querySelector("#monthlyDetailChart");
+    if (!chartContainer) {
+        console.error('Monthly detail chart container not found');
+        return;
+    }
+    
+    // Chart options for monthly detail - LINE CHART
+    const options = {
+        series: data.series || [],
+        chart: {
+            type: 'line',
+            height: 380,
+            toolbar: {
+                show: true,
+                tools: {
+                    download: true,
+                    zoom: true,
+                    zoomin: true,
+                    zoomout: true,
+                    pan: false,
+                    reset: true
+                }
+            },
+            animations: {
+                enabled: true,
+                easing: 'easeinout',
+                speed: 800
+            }
+        },
+        colors: ['#667eea', '#71dd37', '#ff3e1d', '#03c3ec', '#ffab00'],
+        stroke: {
+            curve: 'smooth',
+            width: 3
+        },
+        markers: {
+            size: 6,
+            colors: ['#667eea'],
+            strokeColors: '#fff',
+            strokeWidth: 2,
+            hover: {
+                size: 8
+            }
+        },
+        dataLabels: {
+            enabled: false
+        },
+        xaxis: {
+            categories: data.categories || [],
+            title: {
+                text: 'Bulan',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            }
+        },
+        yaxis: {
+            title: {
+                text: 'Jumlah Penerimaan',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(val) {
+                    return formatCurrencyShort(val);
+                }
+            }
+        },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'left'
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            y: {
+                formatter: function(val) {
+                    if (!val || val === 0) return 'Rp 0';
+                    return 'Rp ' + new Intl.NumberFormat('id-ID').format(val);
+                }
+            }
+        },
+        grid: {
+            borderColor: '#e7e7e7',
+            strokeDashArray: 5
+        }
+    };
+    
+    try {
+        chartSecondary = new ApexCharts(chartContainer, options);
+        chartSecondary.render();
+        console.log('Monthly detail chart rendered successfully');
+    } catch (error) {
+        console.error('Error rendering monthly detail chart:', error);
+        showError('Gagal membuat chart: ' + error.message);
+    }
+}
+
+/**
+ * Destroy secondary chart
+ */
+function destroySecondaryChart() {
+    if (chartSecondary) {
+        try {
+            chartSecondary.destroy();
+            chartSecondary = null;
+            console.log('Secondary chart destroyed');
+        } catch (e) {
+            console.error('Error destroying secondary chart:', e);
+            chartSecondary = null;
+        }
+    }
+}
+
+/**
+ * Show secondary chart with animation
+ */
+function showSecondaryChart() {
+    const container = document.getElementById('trendChartSecondary');
+    if (container) {
+        container.style.display = 'block';
+        
+        // Smooth scroll to secondary chart
+        setTimeout(() => {
+            container.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest' 
+            });
+        }, 300);
+        
+        console.log('Secondary chart shown');
+    }
+}
+
+/**
+ * Hide secondary chart
+ */
+function hideSecondaryChart() {
+    const container = document.getElementById('trendChartSecondary');
+    if (container) {
+        container.style.display = 'none';
+    }
+    
+    // Destroy chart to free memory
+    destroySecondaryChart();
+    
+    // Reset state
+    updateState({
+        selectedYear: null,
+        isDrillDown: false
+    }, false); // Don't reload
+    
+    // Remove bar highlight
+    unhighlightBars();
+    
+    console.log('Secondary chart hidden');
+}
+
+/**
+ * Update cards for monthly view
+ */
+function updateMonthlyCards(summary) {
+    console.log('Updating monthly cards:', summary);
+    
+    if (!summary) return;
+    
+    // Card 1: Total (yearly)
+    const totalGrowthEl = document.getElementById('totalGrowthValue');
+    if (totalGrowthEl) {
+        totalGrowthEl.innerHTML = `<span class="value-text">${formatCurrency(summary.total)}</span>`;
+    }
+    
+    // Card 2: Average Monthly
+    const avgGrowthEl = document.getElementById('avgGrowthValue');
+    if (avgGrowthEl) {
+        avgGrowthEl.innerHTML = `<span class="value-text">${formatCurrency(summary.avgMonthly)}</span>`;
+    }
+    
+    // Card 3: Peak Month
+    const bestPerformerEl = document.getElementById('bestPerformerValue');
+    if (bestPerformerEl) {
+        bestPerformerEl.innerHTML = `<span class="value-text">${summary.peakMonth.name}<br><small>${formatCurrency(summary.peakMonth.value)}</small></span>`;
+    }
+    
+    // Card 4: Trend Direction
+    const statusEl = document.getElementById('trendStatusValue');
+    if (statusEl) {
+        let trendText = 'Stabil';
+        let trendIcon = '→';
+        
+        if (summary.trendDirection === 'increasing') {
+            trendText = `Naik ${summary.monthlyGrowth.toFixed(1)}%`;
+            trendIcon = '↑';
+        } else if (summary.trendDirection === 'decreasing') {
+            trendText = `Turun ${Math.abs(summary.monthlyGrowth).toFixed(1)}%`;
+            trendIcon = '↓';
+        }
+        
+        statusEl.innerHTML = `<span class="value-text">${trendText} ${trendIcon}</span>`;
+    }
+}
+
+/**
+ * Update table for monthly data
+ */
+function updateMonthlyTable(tableData) {
+    console.log('Updating monthly table:', tableData);
+    
+    const tbody = document.getElementById('growthTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (!tableData || tableData.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                    Tidak ada data bulanan
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tableData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${row.monthName}</strong></td>
+            <td class="text-end">${formatCurrency(row.value)}</td>
+            <td class="text-end ${getGrowthClass(row.growth)}">${row.growth.toFixed(1)}%</td>
+            <td class="text-center">${getTrendBadge(row.trend)}</td>
+            <td>${row.description}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/**
+ * Highlight selected bar
+ */
+function highlightSelectedBar(yearIndex) {
+    // This would require ApexCharts API manipulation
+    // For now, we can update via state
+    console.log('Highlighting bar at index:', yearIndex);
+    
+    // Could be implemented with ApexCharts update methods
+    // chart.updateOptions({ ... })
+}
+
+/**
+ * Remove bar highlights
+ */
+function unhighlightBars() {
+    console.log('Removing bar highlights');
+    // Reset any highlights
+}
+
+/**
+ * Update breadcrumb navigation
+ */
+function updateBreadcrumb() {
+    const breadcrumbCategory = document.getElementById('breadcrumbCategory');
+    const breadcrumbCategoryLink = document.getElementById('breadcrumbCategoryLink');
+    const breadcrumbYear = document.getElementById('breadcrumbYear');
+    
+    if (!breadcrumbCategory || !breadcrumbCategoryLink || !breadcrumbYear) {
+        return;
+    }
+    
+    // Show/hide based on state
+    if (appState.categoryId) {
+        breadcrumbCategory.style.display = 'list-item';
+        breadcrumbCategoryLink.textContent = appState.categoryName || 'Kategori';
+    } else {
+        breadcrumbCategory.style.display = 'none';
+    }
+    
+    if (appState.isDrillDown && appState.selectedYear) {
+        breadcrumbYear.style.display = 'list-item';
+        breadcrumbYear.textContent = appState.selectedYear;
+    } else {
+        breadcrumbYear.style.display = 'none';
+    }
+}
+
+/**
+ * Back to category view (from drill-down)
+ */
+function backToCategory() {
+    console.log('Back to category view');
+    
+    // Hide secondary chart
+    hideSecondaryChart();
+    
+    // State already updated in hideSecondaryChart
+}
+
+/**
+ * Reset to overview (clear all filters)
+ */
+function resetToOverview() {
+    console.log('Reset to overview');
+    
+    // Hide secondary chart first
+    if (appState.isDrillDown) {
+        hideSecondaryChart();
+    }
+    
+    // Then reset category
+    if (appState.categoryId) {
+        handleReset();
+    }
+}
+
+// Make functions globally accessible
+window.hideSecondaryChart = hideSecondaryChart;
+window.backToCategory = backToCategory;
+window.resetToOverview = resetToOverview;
+
 
 // Log initialization complete
 console.log('Trend Analysis v2.0 initialized successfully');

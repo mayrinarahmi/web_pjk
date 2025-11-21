@@ -1,57 +1,103 @@
 <div class="dashboard-wrapper" wire:init="loadDashboardData">
-    <!-- Dashboard Title and Year Selector -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4>Dashboard Penerimaan Pajak Daerah</h4>
-        <div class="d-flex align-items-center">
-            <label class="text-muted me-2">Tahun Anggaran:</label>
-            <select class="form-select form-select-sm d-inline-block w-auto" 
-                    wire:model.lazy="selectedTahunAnggaran"
-                    wire:change="loadDashboardData"
-                    wire:key="tahun-selector-{{ now() }}">
-                <option value="">-- Pilih Tahun --</option>
-                @foreach($tahunAnggaranList as $ta)
-                    <option value="{{ $ta->id }}" 
-                            @if($ta->id == $selectedTahunAnggaran) selected @endif>
-                        {{ $ta->tahun }} - {{ strtoupper($ta->jenis_anggaran) }}
-                        @if($ta->is_active)
-                            <span>(AKTIF)</span>
-                        @endif
-                    </option>
-                @endforeach
-            </select>
-            
-            <!-- Loading indicator -->
-            <div wire:loading wire:target="selectedTahunAnggaran, loadDashboardData" class="ms-2">
-                <span class="spinner-border spinner-border-sm text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </span>
+    <!-- Dashboard Header -->
+    <div class="dashboard-header mb-4">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h3 class="dashboard-title mb-1">Dashboard Penerimaan Pajak Daerah</h3>
+                <p class="text-muted mb-0">
+                    <i class="bx bx-building-house me-1"></i> {{ $userInfo }}
+                </p>
+            </div>
+            <div class="col-lg-6">
+                <div class="d-flex justify-content-lg-end align-items-center gap-3">
+                    <!-- Year Selector -->
+                    <div class="d-flex align-items-center">
+                        <label class="text-muted me-2 small">Tahun Anggaran:</label>
+                        <select class="form-select form-select-sm shadow-sm" 
+                                wire:model.live="selectedTahunAnggaran"
+                                style="min-width: 200px;">
+                            <option value="">-- Pilih Tahun --</option>
+                            @foreach($tahunAnggaranList as $ta)
+                                <option value="{{ $ta->id }}">
+                                    {{ $ta->tahun }} - {{ strtoupper($ta->jenis_anggaran) }}
+                                    @if($ta->is_active)
+                                        (AKTIF)
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    
+                    <!-- Refresh Button -->
+                    <button wire:click="refreshData" 
+                            class="btn btn-sm btn-outline-primary"
+                            title="Refresh Data">
+                        <i class="bx bx-refresh"></i>
+                    </button>
+                    
+                    <!-- Loading indicator -->
+                    <div wire:loading wire:target="selectedTahunAnggaran, loadDashboardData, refreshData">
+                        <span class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- ========================================= -->
-    <!-- TAMBAHAN BARU: Info Box dengan Tanggal Data -->
-    <!-- ========================================= -->
-    <!-- Info Tanggal Data Penerimaan -->
-@if($latestPenerimaanDateFormatted)
-<div class="alert alert-info py-2 mb-3">
-    <div class="d-flex align-items-center">
-        <i class="bx bx-calendar fs-5 me-2"></i>
-        <div>
-            Data penerimaan sampai dengan: 
-            <strong class="text-primary">{{ $latestPenerimaanDateFormatted }}</strong>
+    <!-- Alert/Info Boxes -->
+    <div class="row mb-3">
+        <div class="col-12">
+            @if($latestPenerimaanDateFormatted)
+            <div class="alert alert-info py-2 mb-3 shadow-sm border-0">
+                <div class="d-flex align-items-center">
+                    <div class="alert-icon bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                        <i class="bx bx-calendar text-info fs-5"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <small class="text-muted d-block">Data penerimaan terakhir:</small>
+                        <strong class="text-info">{{ $latestPenerimaanDateFormatted }}</strong>
+                    </div>
+                    <div class="d-flex gap-4 text-center">
+                        <div>
+                            <small class="text-muted d-block">Total Transaksi</small>
+                            <strong class="text-info">{{ number_format($totalTransaksi, 0, ',', '.') }}</strong>
+                        </div>
+                        <div>
+                            <small class="text-muted d-block">SKPD Input</small>
+                            <strong class="text-info">{{ number_format($totalSkpd, 0, ',', '.') }}</strong>
+                        </div>
+                        <div>
+                            <small class="text-muted d-block">Capaian Total</small>
+                            <strong class="text-info">{{ number_format($persentaseCapaian, 1) }}%</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @else
+            <div class="alert alert-warning py-2 mb-3 shadow-sm border-0">
+                <div class="d-flex align-items-center">
+                    <div class="alert-icon bg-warning bg-opacity-10 p-2 rounded-circle me-3">
+                        <i class="bx bx-error text-warning fs-5"></i>
+                    </div>
+                    <div>
+                        <strong>Belum ada data penerimaan</strong>
+                        <small class="d-block text-muted">Silakan input data penerimaan terlebih dahulu</small>
+                    </div>
+                </div>
+            </div>
+            @endif
         </div>
     </div>
-</div>
-@endif
 
     <!-- Main Content dengan Loading State -->
     <div wire:loading.class="opacity-50" wire:target="loadDashboardData">
-        <!-- Cards Row -->
+        <!-- Cards Row - TANPA PAGU ANGGARAN -->
         <div class="row g-3 mb-4">
             <!-- Total Pendapatan Daerah -->
             <div class="col-lg-3 col-md-6">
-                <div class="card h-100 border-0 shadow-sm" style="background: linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%);">
+                <div class="card h-100 border-0 shadow-sm hover-card" style="background: linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%);">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
@@ -63,26 +109,26 @@
                             </div>
                         </div>
                         
-                        <h3 class="mb-3 {{ $totalPendapatan['realisasi'] < 0 ? 'text-danger' : 'text-primary' }}">
+                        <h3 class="mb-3 text-primary">
                             Rp {{ number_format($totalPendapatan['realisasi'], 0, ',', '.') }}
                         </h3>
                         
                         <div class="progress mb-2" style="height: 8px; background-color: rgba(0, 123, 255, 0.1);">
-                            <div class="progress-bar {{ $totalPendapatan['persentase'] < 0 ? 'bg-danger' : 'bg-primary' }}" 
-                                 style="width: {{ min(abs($totalPendapatan['persentase']), 100) }}%">
+                            <div class="progress-bar bg-primary" 
+                                 style="width: {{ min($totalPendapatan['persentase'], 100) }}%">
                             </div>
                         </div>
                         
-                        <p class="mb-3 small">
-                            <span class="{{ $totalPendapatan['persentase'] < 0 ? 'text-danger' : 'text-primary' }} fw-bold">
-                                {{ number_format($totalPendapatan['persentase'], 2) }}% dari target
+                        <p class="mb-2 small">
+                            <span class="text-primary fw-bold">
+                                {{ number_format($totalPendapatan['persentase'], 2) }}%
                             </span>
+                            <span class="text-muted">dari target</span>
                         </p>
                         
                         <div class="small text-muted">
-                            <div>Pagu Anggaran: Rp {{ number_format($totalPendapatan['pagu'], 0, ',', '.') }}</div>
                             <div>Target: Rp {{ number_format($totalPendapatan['target'], 0, ',', '.') }}</div>
-                            <div>Kurang dari Target: Rp {{ number_format($totalPendapatan['kurang'], 0, ',', '.') }}</div>
+                            <div>Kurang: Rp {{ number_format($totalPendapatan['kurang'], 0, ',', '.') }}</div>
                         </div>
                     </div>
                 </div>
@@ -90,11 +136,11 @@
 
             <!-- PAD -->
             <div class="col-lg-3 col-md-6">
-                <div class="card h-100 border-0 shadow-sm" style="background: linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(40, 167, 69, 0.05) 100%);">
+                <div class="card h-100 border-0 shadow-sm hover-card" style="background: linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(40, 167, 69, 0.05) 100%);">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
-                                <h6 class="text-muted mb-1">Pendapatan Asli Daerah (PAD)</h6>
+                                <h6 class="text-muted mb-1">Pendapatan Asli Daerah</h6>
                                 <p class="text-muted small mb-0">Realisasi vs Target</p>
                             </div>
                             <div class="bg-success bg-opacity-10 p-2 rounded">
@@ -102,26 +148,26 @@
                             </div>
                         </div>
                         
-                        <h3 class="mb-3 {{ $pad['realisasi'] < 0 ? 'text-danger' : 'text-success' }}">
+                        <h3 class="mb-3 text-success">
                             Rp {{ number_format($pad['realisasi'], 0, ',', '.') }}
                         </h3>
                         
                         <div class="progress mb-2" style="height: 8px; background-color: rgba(40, 167, 69, 0.1);">
-                            <div class="progress-bar {{ $pad['persentase'] < 0 ? 'bg-danger' : 'bg-success' }}" 
-                                 style="width: {{ min(abs($pad['persentase']), 100) }}%">
+                            <div class="progress-bar bg-success" 
+                                 style="width: {{ min($pad['persentase'], 100) }}%">
                             </div>
                         </div>
                         
-                        <p class="mb-3 small">
-                            <span class="{{ $pad['persentase'] < 0 ? 'text-danger' : 'text-success' }} fw-bold">
-                                {{ number_format($pad['persentase'], 2) }}% dari target
+                        <p class="mb-2 small">
+                            <span class="text-success fw-bold">
+                                {{ number_format($pad['persentase'], 2) }}%
                             </span>
+                            <span class="text-muted">dari target</span>
                         </p>
                         
                         <div class="small text-muted">
-                            <div>Pagu Anggaran: Rp {{ number_format($pad['pagu'], 0, ',', '.') }}</div>
                             <div>Target: Rp {{ number_format($pad['target'], 0, ',', '.') }}</div>
-                            <div>Kurang dari Target: Rp {{ number_format($pad['kurang'], 0, ',', '.') }}</div>
+                            <div>Kurang: Rp {{ number_format($pad['kurang'], 0, ',', '.') }}</div>
                         </div>
                     </div>
                 </div>
@@ -129,7 +175,7 @@
 
             <!-- Transfer -->
             <div class="col-lg-3 col-md-6">
-                <div class="card h-100 border-0 shadow-sm" style="background: linear-gradient(135deg, rgba(23, 162, 184, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%);">
+                <div class="card h-100 border-0 shadow-sm hover-card" style="background: linear-gradient(135deg, rgba(23, 162, 184, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%);">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
@@ -141,26 +187,26 @@
                             </div>
                         </div>
                         
-                        <h3 class="mb-3 {{ $transfer['realisasi'] < 0 ? 'text-danger' : 'text-info' }}">
+                        <h3 class="mb-3 text-info">
                             Rp {{ number_format($transfer['realisasi'], 0, ',', '.') }}
                         </h3>
                         
                         <div class="progress mb-2" style="height: 8px; background-color: rgba(23, 162, 184, 0.1);">
-                            <div class="progress-bar {{ $transfer['persentase'] < 0 ? 'bg-danger' : 'bg-info' }}" 
-                                 style="width: {{ min(abs($transfer['persentase']), 100) }}%">
+                            <div class="progress-bar bg-info" 
+                                 style="width: {{ min($transfer['persentase'], 100) }}%">
                             </div>
                         </div>
                         
-                        <p class="mb-3 small">
-                            <span class="{{ $transfer['persentase'] < 0 ? 'text-danger' : 'text-info' }} fw-bold">
-                                {{ number_format($transfer['persentase'], 2) }}% dari target
+                        <p class="mb-2 small">
+                            <span class="text-info fw-bold">
+                                {{ number_format($transfer['persentase'], 2) }}%
                             </span>
+                            <span class="text-muted">dari target</span>
                         </p>
                         
                         <div class="small text-muted">
-                            <div>Pagu Anggaran: Rp {{ number_format($transfer['pagu'], 0, ',', '.') }}</div>
                             <div>Target: Rp {{ number_format($transfer['target'], 0, ',', '.') }}</div>
-                            <div>Kurang dari Target: Rp {{ number_format($transfer['kurang'], 0, ',', '.') }}</div>
+                            <div>Kurang: Rp {{ number_format($transfer['kurang'], 0, ',', '.') }}</div>
                         </div>
                     </div>
                 </div>
@@ -168,11 +214,11 @@
 
             <!-- Lain-lain -->
             <div class="col-lg-3 col-md-6">
-                <div class="card h-100 border-0 shadow-sm" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);">
+                <div class="card h-100 border-0 shadow-sm hover-card" style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
-                                <h6 class="text-muted mb-1">Lain-lain Pendapatan Daerah Yang Sah</h6>
+                                <h6 class="text-muted mb-1">Lain-lain Pendapatan</h6>
                                 <p class="text-muted small mb-0">Realisasi vs Target</p>
                             </div>
                             <div class="bg-warning bg-opacity-10 p-2 rounded">
@@ -180,26 +226,26 @@
                             </div>
                         </div>
                         
-                        <h3 class="mb-3 {{ $lainLain['realisasi'] < 0 ? 'text-danger' : 'text-warning' }}">
+                        <h3 class="mb-3 text-warning">
                             Rp {{ number_format($lainLain['realisasi'], 0, ',', '.') }}
                         </h3>
                         
                         <div class="progress mb-2" style="height: 8px; background-color: rgba(255, 193, 7, 0.1);">
-                            <div class="progress-bar {{ $lainLain['persentase'] < 0 ? 'bg-danger' : 'bg-warning' }}" 
-                                 style="width: {{ min(abs($lainLain['persentase']), 100) }}%">
+                            <div class="progress-bar bg-warning" 
+                                 style="width: {{ min($lainLain['persentase'], 100) }}%">
                             </div>
                         </div>
                         
-                        <p class="mb-3 small">
-                            <span class="{{ $lainLain['persentase'] < 0 ? 'text-danger' : 'text-warning' }} fw-bold">
-                                {{ number_format($lainLain['persentase'], 2) }}% dari target
+                        <p class="mb-2 small">
+                            <span class="text-warning fw-bold">
+                                {{ number_format($lainLain['persentase'], 2) }}%
                             </span>
+                            <span class="text-muted">dari target</span>
                         </p>
                         
                         <div class="small text-muted">
-                            <div>Pagu Anggaran: Rp {{ number_format($lainLain['pagu'], 0, ',', '.') }}</div>
                             <div>Target: Rp {{ number_format($lainLain['target'], 0, ',', '.') }}</div>
-                            <div>Kurang dari Target: Rp {{ number_format($lainLain['kurang'], 0, ',', '.') }}</div>
+                            <div>Kurang: Rp {{ number_format($lainLain['kurang'], 0, ',', '.') }}</div>
                         </div>
                     </div>
                 </div>
@@ -209,26 +255,24 @@
         <!-- Chart Section -->
         <div class="card mb-4 border-0 shadow-sm">
             <div class="card-body">
-                <h5 class="card-title">Tren Penerimaan Bulanan</h5>
+                <h5 class="card-title mb-4">Tren Penerimaan Bulanan</h5>
                 <div id="chart" style="height: 350px;" wire:ignore></div>
             </div>
         </div>
 
-        <!-- Table Section -->
-        <div class="card border-0 shadow-sm">
+        <!-- Table Section - TANPA KOLOM PAGU -->
+        <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h5 class="card-title">Realisasi per Kategori</h5>
-                <p class="text-muted small">Persentase Target: {{ number_format(($currentQuarter == 1 ? 15 : ($currentQuarter == 2 ? 40 : ($currentQuarter == 3 ? 70 : 100))), 0) }}%</p>
+                <h5 class="card-title mb-4">Realisasi per Kategori</h5>
                 
                 <div class="table-responsive">
                     <table class="table table-hover">
-                        <thead>
+                        <thead class="table-light">
                             <tr>
                                 <th>KATEGORI</th>
-                                <th class="text-end">PAGU ANGGARAN</th>
                                 <th class="text-end">TARGET</th>
                                 <th class="text-end">REALISASI</th>
-                                <th class="text-end">KURANG DR TARGET</th>
+                                <th class="text-end">KURANG DARI TARGET</th>
                                 <th class="text-center">PERSENTASE</th>
                                 <th class="text-center" style="width: 150px;">PROGRESS</th>
                             </tr>
@@ -236,15 +280,12 @@
                         <tbody>
                             @forelse($kategoris as $kategori)
                             <tr>
-                                <td>{{ $kategori['nama'] }}</td>
-                                <td class="text-end">Rp {{ number_format($kategori['pagu'], 0, ',', '.') }}</td>
+                                <td class="fw-semibold">{{ $kategori['nama'] }}</td>
                                 <td class="text-end">Rp {{ number_format($kategori['target'], 0, ',', '.') }}</td>
-                                <td class="text-end {{ $kategori['realisasi'] < 0 ? 'text-danger fw-bold' : '' }}">
-                                    Rp {{ number_format($kategori['realisasi'], 0, ',', '.') }}
-                                </td>
-                                <td class="text-end {{ $kategori['kurang'] < 0 ? 'text-success fw-bold' : '' }}">
+                                <td class="text-end">Rp {{ number_format($kategori['realisasi'], 0, ',', '.') }}</td>
+                                <td class="text-end">
                                     @if($kategori['kurang'] < 0)
-                                        <span title="Melebihi target">
+                                        <span class="text-success" title="Melebihi target">
                                             +Rp {{ number_format(abs($kategori['kurang']), 0, ',', '.') }}
                                         </span>
                                     @else
@@ -252,34 +293,21 @@
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    @if($kategori['persentase'] < 0)
-                                        <span class="badge bg-danger">
-                                            {{ number_format($kategori['persentase'], 1) }}%
-                                        </span>
-                                    @else
-                                        <span class="badge {{ $kategori['persentase'] >= 100 ? 'bg-success' : ($kategori['persentase'] >= 70 ? 'bg-warning' : ($kategori['persentase'] >= 50 ? 'bg-info' : 'bg-danger')) }}">
-                                            {{ number_format($kategori['persentase'], 1) }}%
-                                        </span>
-                                    @endif
+                                    <span class="badge {{ $kategori['persentase'] >= 100 ? 'bg-success' : ($kategori['persentase'] >= 70 ? 'bg-warning' : ($kategori['persentase'] >= 50 ? 'bg-info' : 'bg-danger')) }}">
+                                        {{ number_format($kategori['persentase'], 1) }}%
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="progress" style="height: 20px;">
-                                        @if($kategori['persentase'] < 0)
-                                            <div class="progress-bar bg-danger" 
-                                                 style="width: {{ min(abs($kategori['persentase']), 100) }}%"
-                                                 title="Nilai negatif: {{ number_format($kategori['persentase'], 1) }}%">
-                                            </div>
-                                        @else
-                                            <div class="progress-bar {{ $kategori['persentase'] >= 100 ? 'bg-success' : ($kategori['persentase'] >= 70 ? 'bg-warning' : ($kategori['persentase'] >= 50 ? 'bg-info' : 'bg-primary')) }}" 
-                                                 style="width: {{ min($kategori['persentase'], 100) }}%">
-                                            </div>
-                                        @endif
+                                        <div class="progress-bar {{ $kategori['persentase'] >= 100 ? 'bg-success' : ($kategori['persentase'] >= 70 ? 'bg-warning' : ($kategori['persentase'] >= 50 ? 'bg-info' : 'bg-primary')) }}" 
+                                             style="width: {{ min($kategori['persentase'], 100) }}%">
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted">
+                                <td colspan="6" class="text-center text-muted py-4">
                                     Tidak ada data untuk tahun anggaran yang dipilih
                                 </td>
                             </tr>
@@ -289,12 +317,155 @@
                 </div>
             </div>
         </div>
+
+        <!-- LANJUTAN DARI PART 1 -->
+        
+        <!-- TAMBAHAN: Data Per SKPD (Hanya untuk Super Admin/Kepala Badan) -->
+        @if($canSeeAllSkpd && count($dataPerSkpd) > 0)
+        
+        <!-- Top & Bottom Performers -->
+        <div class="row mb-4">
+            <!-- Top 5 SKPD -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-success bg-opacity-10 border-0">
+                        <h6 class="mb-0 text-success">
+                            <i class="fas fa-trophy me-2"></i>Top 5 SKPD - Capaian Tertinggi
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        @forelse($topSkpd as $index => $skpd)
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="badge bg-success me-3" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+                                {{ $index + 1 }}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold small">{{ $skpd['nama'] }}</div>
+                                <div class="progress mt-1" style="height: 5px;">
+                                    <div class="progress-bar bg-success" 
+                                         style="width: {{ min($skpd['persentase'], 100) }}%">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-end ms-3">
+                                <div class="fw-bold text-success">{{ number_format($skpd['persentase'], 1) }}%</div>
+                                <div class="text-muted small">Rp {{ number_format($skpd['realisasi'] / 1000000, 0, ',', '.') }} Jt</div>
+                            </div>
+                        </div>
+                        @empty
+                        <p class="text-muted text-center mb-0">Belum ada data realisasi</p>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom 5 SKPD -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-warning bg-opacity-10 border-0">
+                        <h6 class="mb-0 text-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Bottom 5 SKPD - Perlu Perhatian
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        @forelse($bottomSkpd as $index => $skpd)
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="badge bg-warning me-3" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+                                {{ $index + 1 }}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold small">{{ $skpd['nama'] }}</div>
+                                <div class="progress mt-1" style="height: 5px;">
+                                    <div class="progress-bar bg-warning" 
+                                         style="width: {{ min($skpd['persentase'], 100) }}%">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-end ms-3">
+                                <div class="fw-bold text-warning">{{ number_format($skpd['persentase'], 1) }}%</div>
+                                <div class="text-muted small">Rp {{ number_format($skpd['realisasi'] / 1000000, 0, ',', '.') }} Jt</div>
+                            </div>
+                        </div>
+                        @empty
+                        <p class="text-muted text-center mb-0">Belum ada data realisasi</p>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabel Realisasi Per SKPD -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="card-title mb-0">Realisasi Penerimaan per SKPD</h5>
+                    <small class="text-muted">Total: {{ count($dataPerSkpd) }} SKPD</small>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tabelSkpd">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="5%">No</th>
+                                <th width="10%">Kode</th>
+                                <th width="35%">Nama SKPD</th>
+                                <th class="text-end" width="15%">Target</th>
+                                <th class="text-end" width="15%">Realisasi</th>
+                                <th class="text-center" width="10%">%</th>
+                                <th class="text-center" width="10%">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($dataPerSkpd as $index => $skpd)
+                            <tr>
+                                <td>{{ $index + 1 }}</td>
+                                <td>{{ $skpd['kode'] }}</td>
+                                <td class="fw-semibold">{{ $skpd['nama'] }}</td>
+                                <td class="text-end">Rp {{ number_format($skpd['target'], 0, ',', '.') }}</td>
+                                <td class="text-end">Rp {{ number_format($skpd['realisasi'], 0, ',', '.') }}</td>
+                                <td class="text-center">
+                                    <span class="badge {{ $skpd['persentase'] >= 100 ? 'bg-success' : ($skpd['persentase'] >= 70 ? 'bg-warning' : ($skpd['persentase'] >= 50 ? 'bg-info' : 'bg-danger')) }}">
+                                        {{ number_format($skpd['persentase'], 1) }}%
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    @if($skpd['persentase'] >= 100)
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check-circle me-1"></i>Tercapai
+                                        </span>
+                                    @elseif($skpd['persentase'] >= 70)
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-clock me-1"></i>Proses
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-exclamation-circle me-1"></i>Rendah
+                                        </span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Tidak ada data SKPD dengan pagu anggaran
+                                </td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        @endif
+        <!-- END Data Per SKPD -->
+        
     </div>
+    <!-- End Main Content -->
 
     <!-- Loading Overlay -->
     <div wire:loading.flex wire:target="loadDashboardData" 
          class="position-fixed top-0 start-0 w-100 h-100 justify-content-center align-items-center" 
-         style="background: rgba(255,255,255,0.8); z-index: 9999;">
+         style="background: rgba(255,255,255,0.9); z-index: 9999;">
         <div class="text-center">
             <div class="spinner-border text-primary mb-2" style="width: 3rem; height: 3rem;" role="status">
                 <span class="visually-hidden">Loading...</span>
@@ -305,14 +476,14 @@
 
     <!-- Styles -->
     <style>
-    /* Additional styling for better visual */
-    .card {
-        transition: transform 0.2s, box-shadow 0.2s;
+    /* Card hover effect */
+    .hover-card {
+        transition: all 0.3s ease;
     }
-
-    .card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    
+    .hover-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15) !important;
     }
 
     /* Icon styling */
@@ -341,103 +512,143 @@
         opacity: 0.5;
         pointer-events: none;
     }
+    
+    /* Alert icon */
+    .alert-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Table header */
+    .table-light th {
+        font-weight: 600;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+    }
     </style>
 
     <!-- Scripts -->
     @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-<script>
-    let dashboardChart = null;
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
+        let dashboardChart = null;
 
-    document.addEventListener('DOMContentLoaded', function () {
-        // Initial chart render dengan data dari server
-        initChart(@json($chartData));
-    });
-
-    // Listen for Livewire updates (Livewire v3)
-    document.addEventListener('livewire:initialized', () => {
-        // Listen untuk event refreshChart dengan data
-        Livewire.on('refreshChart', (event) => {
-            // Extract data dari event (Livewire v3 format)
-            const chartData = event.chartData || event[0]?.chartData || event;
-            
-            if (chartData && chartData.categories && chartData.series) {
-                initChart(chartData);
-            }
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initial chart render dengan data dari server
+            initChart(@json($chartData));
         });
-    });
 
-    function initChart(chartData) {
-        // Validasi data
-        if (!chartData || !chartData.categories || !chartData.series) {
-            console.error('Invalid chart data:', chartData);
-            return;
-        }
+        // Listen for Livewire updates (Livewire v3)
+        document.addEventListener('livewire:initialized', () => {
+            // Listen untuk event refreshChart dengan data
+            Livewire.on('refreshChart', (event) => {
+                // Extract data dari event (Livewire v3 format)
+                const chartData = event.chartData || event[0]?.chartData || event;
+                
+                if (chartData && chartData.categories && chartData.series) {
+                    initChart(chartData);
+                }
+            });
+            
+            // Listen untuk data refreshed event
+            Livewire.on('dataRefreshed', () => {
+                // Bisa tambahkan animasi atau notifikasi di sini
+                console.log('Dashboard data refreshed');
+            });
+        });
 
-        // Destroy existing chart if any
-        if (dashboardChart) {
-            dashboardChart.destroy();
-            dashboardChart = null;
-        }
-
-        var options = {
-            series: chartData.series,
-            chart: {
-                type: 'bar',
-                height: 350,
-                toolbar: {
-                    show: false
-                }
-            },
-            plotOptions: {
-                bar: {
-                    horizontal: false,
-                    columnWidth: '55%',
-                    endingShape: 'rounded'
-                },
-            },
-            dataLabels: {
-                enabled: false
-            },
-            stroke: {
-                show: true,
-                width: 2,
-                colors: ['transparent']
-            },
-            xaxis: {
-                categories: chartData.categories,
-            },
-            yaxis: {
-                title: {
-                    text: 'Rupiah (Rp)'
-                },
-                labels: {
-                    formatter: function (val) {
-                        return "Rp " + new Intl.NumberFormat('id-ID').format(val);
-                    }
-                }
-            },
-            fill: {
-                opacity: 1
-            },
-            tooltip: {
-                y: {
-                    formatter: function (val) {
-                        return "Rp " + new Intl.NumberFormat('id-ID').format(val);
-                    }
-                }
-            },
-            colors: ['#28a745', '#17a2b8', '#ffc107'],
-            legend: {
-                position: 'bottom',
-                horizontalAlign: 'center'
+        function initChart(chartData) {
+            // Validasi data
+            if (!chartData || !chartData.categories || !chartData.series) {
+                console.error('Invalid chart data:', chartData);
+                return;
             }
-        };
 
-        // Create new chart
-        dashboardChart = new ApexCharts(document.querySelector("#chart"), options);
-        dashboardChart.render();
-    }
-</script>
-@endpush
+            // Destroy existing chart if any
+            if (dashboardChart) {
+                dashboardChart.destroy();
+                dashboardChart = null;
+            }
+
+            var options = {
+                series: chartData.series,
+                chart: {
+                    type: 'bar',
+                    height: 350,
+                    toolbar: {
+                        show: true,
+                        tools: {
+                            download: true,
+                            selection: false,
+                            zoom: false,
+                            zoomin: false,
+                            zoomout: false,
+                            pan: false,
+                            reset: false
+                        }
+                    }
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: false,
+                        columnWidth: '65%',
+                        endingShape: 'rounded',
+                        dataLabels: {
+                            position: 'top'
+                        }
+                    },
+                },
+                dataLabels: {
+                    enabled: false
+                },
+                stroke: {
+                    show: true,
+                    width: 2,
+                    colors: ['transparent']
+                },
+                xaxis: {
+                    categories: chartData.categories,
+                },
+                yaxis: {
+                    title: {
+                        text: 'Rupiah (Rp)'
+                    },
+                    labels: {
+                        formatter: function (val) {
+                            if (val >= 1000000000) {
+                                return "Rp " + (val / 1000000000).toFixed(1) + " M";
+                            } else if (val >= 1000000) {
+                                return "Rp " + (val / 1000000).toFixed(0) + " Jt";
+                            } else {
+                                return "Rp " + new Intl.NumberFormat('id-ID').format(val);
+                            }
+                        }
+                    }
+                },
+                fill: {
+                    opacity: 1
+                },
+                tooltip: {
+                    y: {
+                        formatter: function (val) {
+                            return "Rp " + new Intl.NumberFormat('id-ID').format(val);
+                        }
+                    }
+                },
+                colors: ['#28a745', '#17a2b8', '#ffc107'],
+                legend: {
+                    position: 'bottom',
+                    horizontalAlign: 'center'
+                }
+            };
+
+            // Create new chart
+            dashboardChart = new ApexCharts(document.querySelector("#chart"), options);
+            dashboardChart.render();
+        }
+    </script>
+    @endpush
 </div>

@@ -7,24 +7,36 @@
             </a>
         </div>
         <div class="card-body">
-            <!-- Info current data -->
+            {{-- ================================================ --}}
+            {{-- USER INFO & SKPD INFO - TAMBAHAN BARU ✅ --}}
+            {{-- ================================================ --}}
+            @if($userSkpdInfo)
+            <div class="alert {{ $showSkpdDropdown ? 'alert-info' : 'alert-warning' }} py-2">
+                <i class="bx bx-info-circle"></i> {{ $userSkpdInfo }}
+            </div>
+            @endif
+            
+            {{-- Info current data --}}
             <div class="alert alert-info">
                 <h6><i class="bx bx-info-circle"></i> Data yang sedang diedit:</h6>
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <strong>Kode Rekening:</strong> {{ $kodeRekeningInfo->kode ?? '-' }}<br>
                         <strong>Nama:</strong> {{ $kodeRekeningInfo->nama ?? '-' }}<br>
                         <strong>Level:</strong> {{ $kodeRekeningInfo->level ?? '-' }}
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <strong>Tahun Anggaran:</strong> {{ $tahunAnggaranInfo->display_name ?? '-' }}<br>
                         <strong>Target Lama:</strong> Rp {{ number_format($oldJumlah, 0, ',', '.') }}<br>
                         <strong>Target Baru:</strong> <span class="fw-bold text-primary">Rp {{ number_format($jumlah, 0, ',', '.') }}</span>
                     </div>
+                    <div class="col-md-4">
+                        <strong>SKPD:</strong> {{ $targetAnggaran->skpd ? $targetAnggaran->skpd->nama_opd : 'Tidak ada SKPD' }}
+                    </div>
                 </div>
             </div>
             
-            <!-- Feedback messages -->
+            {{-- Feedback messages --}}
             @if(session()->has('message'))
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     {{ session('message') }}
@@ -48,6 +60,28 @@
             
             <form wire:submit.prevent="update">
                 <div class="row">
+                    {{-- ================================================ --}}
+                    {{-- SKPD SELECTOR - TAMBAHAN BARU (HANYA SUPER ADMIN) ✅ --}}
+                    {{-- ================================================ --}}
+                    @if($showSkpdDropdown)
+                    <div class="col-md-12 mb-3">
+                        <label for="selectedSkpdId" class="form-label">SKPD <span class="text-danger">*</span></label>
+                        <select class="form-select @error('selectedSkpdId') is-invalid @enderror" 
+                            id="selectedSkpdId" wire:model.live="selectedSkpdId">
+                            <option value="">Pilih SKPD</option>
+                            @foreach($skpdList as $skpd)
+                                <option value="{{ $skpd->id }}">{{ $skpd->nama_opd }}</option>
+                            @endforeach
+                        </select>
+                        @error('selectedSkpdId')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">
+                            <i class="bx bx-building"></i> Super Admin dapat mengubah kepemilikan SKPD
+                        </div>
+                    </div>
+                    @endif
+                    
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="tahunAnggaranId" class="form-label">Tahun Anggaran <span class="text-danger">*</span></label>
@@ -81,7 +115,7 @@
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                             <div class="form-text">
-                                <i class="bx bx-info-circle"></i> Hanya kode rekening level 5 yang dapat dipilih
+                                <i class="bx bx-info-circle"></i> Hanya kode rekening <strong>Level 6</strong> yang dapat dipilih
                             </div>
                         </div>
                     </div>
@@ -98,7 +132,7 @@
                         @enderror
                     </div>
                     
-                    <!-- Live preview perubahan -->
+                    {{-- Live preview perubahan --}}
                     @if($jumlah != $oldJumlah)
                         @php
                             $change = $jumlah - $oldJumlah;
@@ -112,7 +146,7 @@
                     @endif
                 </div>
                 
-                <!-- Dampak Hierarki Preview -->
+                {{-- Dampak Hierarki Preview --}}
                 @if(!empty($impactPreview))
                     <div class="alert alert-warning">
                         <h6><i class="bx bx-git-branch"></i> Dampak Perubahan pada Hierarki Parent:</h6>
@@ -145,14 +179,15 @@
         </div>
     </div>
     
-    <!-- Info tambahan tentang hierarki -->
+    {{-- Info tambahan tentang hierarki --}}
     <div class="card mt-3">
         <div class="card-body">
             <h6><i class="bx bx-help-circle"></i> Informasi Hierarki Target Anggaran:</h6>
             <ul class="mb-0">
-                <li><strong>Otomatis Update:</strong> Perubahan target level 5 akan otomatis memperbarui semua parent (level 1-4)</li>
+                <li><strong>Otomatis Update:</strong> Perubahan target level 6 akan otomatis memperbarui semua parent (level 1-5)</li>
                 <li><strong>Konsistensi:</strong> Target parent selalu = SUM dari children</li>
                 <li><strong>Real-time Preview:</strong> Dampak perubahan ditampilkan sebelum menyimpan</li>
+                <li><strong>Per SKPD:</strong> Target tersimpan untuk SKPD tertentu</li>
                 <li><strong>Audit Trail:</strong> Informasi perubahan dan dampak tersimpan di log</li>
             </ul>
         </div>

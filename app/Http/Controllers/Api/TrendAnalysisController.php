@@ -487,4 +487,133 @@ class TrendAnalysisController extends Controller
         
         return $months[$month] ?? '';
     }
+
+    /**
+     * ✨ NEW: Get monthly detail for drill-down
+     * 
+     * @param string $id - Category ID
+     * @param int $year - Year
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function monthlyDetail($id, $year, Request $request)
+    {
+        try {
+            // Validate year parameter
+            if (!is_numeric($year) || $year < 2020 || $year > date('Y')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid year parameter. Year must be between 2020 and ' . date('Y')
+                ], 400);
+            }
+            
+            // Get category
+            $kodeRekening = \App\Models\KodeRekening::find($id);
+            if (!$kodeRekening) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found with ID: ' . $id
+                ], 404);
+            }
+            
+            Log::info('Monthly detail request', [
+                'categoryId' => $id,
+                'categoryName' => $kodeRekening->nama,
+                'year' => $year,
+                'level' => $kodeRekening->level
+            ]);
+            
+            // Determine parameters for chart data based on level
+            if ($kodeRekening->level < 6) {
+                // Level 1-5: Show children or aggregated data
+                $level = $kodeRekening->level + 1;
+                $parentKode = $kodeRekening->id;
+                $specificId = null;
+            } else {
+                // Level 6: Show the item itself
+                $level = 6;
+                $parentKode = null;
+                $specificId = $kodeRekening->id;
+            }
+            
+            // Get chart data (monthly breakdown for the year)
+            // This will show Jan-Dec data for the selected year
+            $chartData = $this->trendService->getMonthlyChartData(
+                $level,
+                $parentKode,
+                $year,
+                10,
+                $specificId,
+                null  // null = show all 12 months, not a specific month comparison
+            );
+            
+            // Get summary statistics for cards
+            $summary = $this->trendService->getMonthlySummary($id, $year);
+            
+            // Get growth table data (month-over-month)
+            $tableData = $this->trendService->getMonthlyGrowthTable($id, $year);
+            
+            // Check if we have data
+            if (empty($chartData['categories']) && empty($chartData['series'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No data available for the selected year'
+                ], 404);
+            }
+            
+            // Build response
+            $response = [
+                'success' => true,
+                'data' => [
+                    // Chart data
+                    'categories' => $chartData['categories'] ?? [],
+                    'series' => $chartData['series'] ?? [],
+                    
+                    // Summary for cards
+                    'summary' => $summary,
+                    
+                    // Table data
+                    'tableData' => $tableData,
+                    
+                    // Category info
+                    'categoryInfo' => [
+                        'id' => $kodeRekening->id,
+                        'kode' => $kodeRekening->kode,
+                        'nama' => $kodeRekening->nama,
+                        'level' => $kodeRekening->level
+                    ],
+                    
+                    // Year info
+                    'year' => (int)$year
+                ]
+            ];
+            
+            Log::info('Monthly detail response prepared', [
+                'categoryId' => $id,
+                'year' => $year,
+                'seriesCount' => count($chartData['series'] ?? []),
+                'hasSummary' => !is_null($summary),
+                'tableRows' => count($tableData)
+            ]);
+            
+            return response()->json($response);
+            
+        } catch (\Exception $e) {
+            Log::error('Error getting monthly detail', [
+                'categoryId' => $id,
+                'year' => $year,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading monthly detail: ' . $e->getMessage(),
+                'debug' => config('app.debug') ? [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
+            ], 500);
+        }
+    }
 }

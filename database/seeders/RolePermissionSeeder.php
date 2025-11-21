@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 class RolePermissionSeeder extends Seeder
 {
@@ -14,7 +15,15 @@ class RolePermissionSeeder extends Seeder
         // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
+        $this->command->info('');
+        $this->command->info('=================================');
+        $this->command->info('🚀 Setting up Roles & Permissions');
+        $this->command->info('=================================');
+        $this->command->info('');
+
         // STEP 1: Buat Permissions
+        $this->command->info('📝 Creating Permissions...');
+        
         $permissions = [
             // Dashboard
             'view-dashboard',
@@ -35,11 +44,18 @@ class RolePermissionSeeder extends Seeder
             'delete-kode-rekening',
             'import-kode-rekening',
             
-            // Master Data - Target
+            // Master Data - Target Periode
+            'view-target-periode',
+            'create-target-periode',
+            'edit-target-periode',
+            'delete-target-periode',
+            
+            // Master Data - Target Anggaran / Pagu Anggaran (✅ TAMBAHAN BARU!)
             'view-target',
             'create-target',
             'edit-target',
             'delete-target',
+            'import-target',
             
             // Transaksi - Penerimaan
             'view-penerimaan',
@@ -67,39 +83,64 @@ class RolePermissionSeeder extends Seeder
         ];
 
         foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
+            $perm = Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+            if ($perm->wasRecentlyCreated) {
+                $this->command->info("   ✓ Created: {$permission}");
+            } else {
+                $this->command->info("   - Exists: {$permission}");
+            }
         }
+
+        $this->command->info('');
+        $this->command->info('👥 Assigning Permissions to Roles...');
 
         // STEP 2: Buat/Update Roles dengan permissions yang sesuai
         
+        // ==========================================
         // 1. SUPER ADMIN - Full Access
+        // ==========================================
         $superAdminRole = Role::firstOrCreate(['name' => 'Super Admin']);
         $superAdminRole->syncPermissions(Permission::all());
+        $this->command->info('   ✓ Super Admin: ALL permissions (' . Permission::count() . ' permissions)');
         
-        // 2. ADMINISTRATOR (backward compatibility) - Sama seperti Super Admin
+        // ==========================================
+        // 2. ADMINISTRATOR - Full Access (backward compatibility)
+        // ==========================================
         $adminRole = Role::firstOrCreate(['name' => 'Administrator']);
         $adminRole->syncPermissions(Permission::all());
+        $this->command->info('   ✓ Administrator: ALL permissions (' . Permission::count() . ' permissions)');
         
-        // 3. KEPALA BADAN - View Only untuk semua, tidak bisa create/edit/delete
+        // ==========================================
+        // 3. KEPALA BADAN - View Only untuk semua
+        // ==========================================
         $kepalaBadanRole = Role::firstOrCreate(['name' => 'Kepala Badan']);
         $kepalaBadanRole->syncPermissions([
             'view-dashboard',
             'view-trend-analysis',
             'view-tahun-anggaran',
             'view-kode-rekening',
-            'view-target',
+            'view-target-periode',
+            'view-target',          // ✅ Target Anggaran - VIEW ONLY
             'view-penerimaan',
             'view-laporan',
-            'export-laporan', // Kepala Badan boleh export laporan
+            'export-laporan',
         ]);
+        $this->command->info('   ✓ Kepala Badan: VIEW permissions only (9 permissions)');
         
-        // 4. OPERATOR SKPD - Input penerimaan, TANPA akses Master Data
+        // ==========================================
+        // 4. OPERATOR SKPD - Pagu Anggaran + Penerimaan ONLY (✅ PENTING!)
+        // ==========================================
         $operatorSkpdRole = Role::firstOrCreate(['name' => 'Operator SKPD']);
         $operatorSkpdRole->syncPermissions([
             'view-dashboard',
-            // TIDAK ADA permission untuk Master Data (Total Hidden)
+            // TIDAK ADA permission untuk Master Data lain
             // TIDAK ADA view-trend-analysis
-            // Penerimaan - full akses untuk SKPD sendiri
+            // ✅ Target Anggaran / Pagu Anggaran - FULL CRUD
+            'view-target',
+            'create-target',
+            'edit-target',
+            'import-target',
+            // Penerimaan - FULL CRUD untuk SKPD sendiri
             'view-penerimaan',
             'create-penerimaan',
             'edit-penerimaan',
@@ -109,50 +150,107 @@ class RolePermissionSeeder extends Seeder
             'view-laporan',
             'export-laporan',
         ]);
+        $this->command->info('   ✓ Operator SKPD: Pagu Anggaran + Penerimaan (12 permissions)');
         
-        // 5. OPERATOR (backward compatibility) - Limited Access  
+        // ==========================================
+        // 5. OPERATOR - Limited Access (backward compatibility)
+        // ==========================================
         $operatorRole = Role::firstOrCreate(['name' => 'Operator']);
         $operatorRole->syncPermissions([
             'view-dashboard',
             'view-trend-analysis',
+            // Master Data - VIEW + CREATE + EDIT (tanpa DELETE)
             'view-tahun-anggaran',
             'create-tahun-anggaran',
             'edit-tahun-anggaran',
             'view-kode-rekening',
             'create-kode-rekening',
             'edit-kode-rekening',
+            'import-kode-rekening',
+            'view-target-periode',
+            'create-target-periode',
+            'edit-target-periode',
+            // ✅ Target Anggaran - CREATE + EDIT (tanpa DELETE)
             'view-target',
             'create-target',
             'edit-target',
+            'import-target',
+            // Penerimaan - FULL CRUD
             'view-penerimaan',
             'create-penerimaan',
             'edit-penerimaan',
+            'import-penerimaan',
+            // Laporan
             'view-laporan',
             'export-laporan',
+            // Settings
             'manage-backup',
             'view-users',
             'create-users',
             'edit-users',
             'delete-users',
         ]);
+        $this->command->info('   ✓ Operator: View Master + CRUD Transaksi (26 permissions)');
         
-        // 6. VIEWER (backward compatibility) - Read Only
+        // ==========================================
+        // 6. VIEWER - Read Only (backward compatibility)
+        // ==========================================
         $viewerRole = Role::firstOrCreate(['name' => 'Viewer']);
         $viewerRole->syncPermissions([
             'view-dashboard',
             'view-trend-analysis',
+            'view-tahun-anggaran',
+            'view-kode-rekening',
+            'view-target-periode',
+            'view-target',          // ✅ Target Anggaran - VIEW ONLY
+            'view-penerimaan',
             'view-laporan',
+            'export-laporan',
         ]);
+        $this->command->info('   ✓ Viewer: VIEW permissions only (9 permissions)');
+
+        $this->command->info('');
+        $this->command->info('=================================');
+        $this->command->info('✅ Roles & Permissions Setup Complete!');
+        $this->command->info('=================================');
+        $this->command->info('');
 
         // STEP 3: Clear existing roles and reassign
         $this->reassignRoles();
+        
+        // Summary
+        $this->command->info('');
+        $this->command->info('📊 Summary:');
+        $this->command->info('   - Total Permissions: ' . Permission::count());
+        $this->command->info('   - Total Roles: ' . Role::count());
+        $this->command->info('');
+        
+        // Detailed role permissions count
+        $roles = Role::with('permissions')->get();
+        $this->command->info('📋 Permissions per Role:');
+        foreach ($roles as $role) {
+            $this->command->info('   - ' . $role->name . ': ' . $role->permissions->count() . ' permissions');
+        }
+        
+        $this->command->info('');
+        $this->command->info('🔐 Next steps:');
+        $this->command->info('   1. Run: php artisan permission:cache-reset');
+        $this->command->info('   2. Run: php artisan cache:clear');
+        $this->command->info('   3. Logout and login again for all users');
+        $this->command->info('   4. Test menu access for each role');
+        $this->command->info('');
+
+        Log::info('RolePermissionSeeder completed successfully', [
+            'total_permissions' => Permission::count(),
+            'total_roles' => Role::count(),
+        ]);
         
         echo "Role Permission Seeder completed successfully!\n";
     }
 
     private function reassignRoles()
     {
-        echo "Reassigning roles to users...\n";
+        $this->command->info('👤 Reassigning roles to users...');
         
         // Get specific users by NIP
         
@@ -160,35 +258,35 @@ class RolePermissionSeeder extends Seeder
         $superAdmin = User::where('nip', '198001011990031001')->first();
         if ($superAdmin) {
             $superAdmin->syncRoles(['Super Admin']);
-            echo "User {$superAdmin->name} => Super Admin\n";
+            $this->command->info("   ✓ {$superAdmin->name} => Super Admin");
         }
         
         // 2. Kepala BPKPAD
         $kepalaBadan = User::where('nip', '196901121993031004')->first();
         if ($kepalaBadan) {
             $kepalaBadan->syncRoles(['Kepala Badan']);
-            echo "User {$kepalaBadan->name} => Kepala Badan\n";
+            $this->command->info("   ✓ {$kepalaBadan->name} => Kepala Badan");
         }
         
         // 3. Operator Dinas Kesehatan
         $operatorDinkes = User::where('nip', '199001011990031001')->first();
         if ($operatorDinkes) {
             $operatorDinkes->syncRoles(['Operator SKPD']);
-            echo "User {$operatorDinkes->name} => Operator SKPD (Dinkes)\n";
+            $this->command->info("   ✓ {$operatorDinkes->name} => Operator SKPD (Dinkes)");
         }
         
         // 4. Operator Dinas PU
         $operatorPU = User::where('nip', '199101011991031001')->first();
         if ($operatorPU) {
             $operatorPU->syncRoles(['Operator SKPD']);
-            echo "User {$operatorPU->name} => Operator SKPD (PU)\n";
+            $this->command->info("   ✓ {$operatorPU->name} => Operator SKPD (PU)");
         }
         
         // 5. Viewer
         $viewer = User::where('nip', '200001012000031001')->first();
         if ($viewer) {
             $viewer->syncRoles(['Viewer']);
-            echo "User {$viewer->name} => Viewer\n";
+            $this->command->info("   ✓ {$viewer->name} => Viewer");
         }
         
         // 6. Handle other users based on their role_id and skpd_id
@@ -203,16 +301,16 @@ class RolePermissionSeeder extends Seeder
         foreach ($otherUsers as $user) {
             if ($user->role_id == 1 && $user->skpd_id == null) {
                 $user->syncRoles(['Administrator']);
-                echo "User {$user->name} => Administrator\n";
+                $this->command->info("   ✓ {$user->name} => Administrator");
             } elseif ($user->role_id == 2 && $user->skpd_id == null) {
                 $user->syncRoles(['Operator']);
-                echo "User {$user->name} => Operator\n";
+                $this->command->info("   ✓ {$user->name} => Operator");
             } elseif ($user->role_id == 3) {
                 $user->syncRoles(['Viewer']);
-                echo "User {$user->name} => Viewer\n";
+                $this->command->info("   ✓ {$user->name} => Viewer");
             }
         }
         
-        echo "Role reassignment completed!\n";
+        $this->command->info('   ✓ Role reassignment completed!');
     }
 }
