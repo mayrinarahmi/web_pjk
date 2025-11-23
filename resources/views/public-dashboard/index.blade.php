@@ -1,617 +1,834 @@
-@extends('layouts.public')
-
-@section('title', 'Dashboard Pendapatan Daerah ')
-
-@section('content')
-<div x-data="publicDashboard()" x-init="init()">
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+   <link rel="icon" href="{{ asset('images/silapat-favicon.png') }}">
+    <title>SILAPAT - BPKPAD Banjarmasin</title>
     
-    <!-- Hero Section -->
-    <div class="row mb-4" data-aos="fade-down">
-        <div class="col-12">
-            <div class="card-modern p-4">
-                <div class="row align-items-center">
-                    <div class="col-lg-8">
-                        <h1 class="text-gradient mb-2" style="font-size: 2rem; font-weight: 700;">
-                            Dashboard Pendapatan Daerah
-                        </h1>
-                        <p class="text-muted mb-3">
-                            <i class='bx bx-map me-1'></i>
-                            Kota Banjarmasin - Transparansi Pengelolaan Keuangan Daerah
-                        </p>
-                        <div class="d-flex align-items-center gap-3 flex-wrap">
-                            <div class="badge badge-modern bg-primary text-white">
-                                <i class='bx bx-calendar me-1'></i>
-                                <span x-text="'Tahun ' + selectedYear"></span>
-                            </div>
-                            <div class="badge badge-modern" style="background: rgba(102, 126, 234, 0.1); color: var(--primary-color);">
-                                <i class='bx bx-time me-1'></i>
-                                <span x-text="'Update: ' + summary.update_terakhir"></span>
-                            </div>
-                        </div>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ asset('css/public-modern.css') }}">
+    
+    <style>
+
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .dashboard-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .dashboard-header {
+            flex-shrink: 0;
+            height: 75px;
+        }
+        
+        .info-banner-section {
+            flex-shrink: 0;
+            height: 42px;
+        }
+        
+        .dashboard-content {
+            flex: 1;
+            overflow: hidden;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 0;
+        }
+        
+        .top-row {
+    flex: 0 0 48%;     /* ← Dari 45% → 48% (lebih tinggi) */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    min-height: 0;
+}
+        
+        .bottom-row {
+            flex: 1;
+            min-height: 0;
+        }
+        
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            min-height: 0;
+        }
+        
+        .card-big {
+            flex: 0 0 auto;
+        }
+        
+        .cards-small-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.65rem;
+            min-height: 0;
+        }
+        
+        .right-column {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            border-radius: 0.75rem;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            min-height: 0;
+            scroll-behavior: smooth;
+        }
+        
+        .table-container:hover {
+            scroll-behavior: auto;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem 0.75rem 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        
+        .dashboard-footer {
+            flex-shrink: 0;
+            height: 35px;
+        }
+        
+        /* Gradient backgrounds */
+        .gradient-purple {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-green {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .gradient-cyan {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        }
+        
+        .gradient-orange {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+        
+        /* Progress bar */
+        .progress-bar {
+            height: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2.5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: white;
+            border-radius: 2.5px;
+            transition: width 0.3s ease;
+        }
+        
+        /* Table styles */
+        .table-skpd {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table-skpd thead {
+            position: sticky;
+            top: 0;
+            background: #f9fafb;
+            z-index: 10;
+        }
+        
+        .table-skpd th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;      // ← Lebih besar (13px)
+    color: #374151;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+        
+        
+        .table-skpd td {
+    padding: 0.8rem 1rem;
+    font-size: 0.875rem;    // ← Lebih besar (14px)
+    border-bottom: 1px solid #e5e7eb;
+}
+        
+        .table-skpd tbody tr:hover {
+            background: #f9fafb;
+        }
+        
+        /* Logo styles */
+        .logo-silapat {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1280px) {
+            .top-row {
+                flex: 0 0 48%;
+            }
+        }
+        
+        @media (max-width: 1024px) {
+            body {
+                overflow: auto;
+            }
+            
+            .dashboard-container {
+                height: auto;
+            }
+            
+            .dashboard-content {
+                overflow-y: visible;
+            }
+            
+            .top-row {
+                grid-template-columns: 1fr;
+                flex: 0 0 auto;
+            }
+            
+            .cards-small-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-container {
+                max-height: 400px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-content {
+                padding: 0.75rem;
+            }
+            
+            .cards-small-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* FORCE FIX - Chart Alignment */
+.bottom-row {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.chart-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    box-sizing: border-box !important;
+}
+
+.top-row,
+.bottom-row {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+  </style>
+</head>
+<body class="bg-gray-50">
+    <div class="dashboard-container" x-data="publicDashboard()">
+        
+        <!-- Header -->
+        <div class="dashboard-header bg-white shadow-sm">
+            <div class="px-5 py-2 h-full flex items-center justify-between">
+                <!-- Logo & Title -->
+                <div class="flex items-center gap-3">
+                    <img src="{{ asset('images/logo.png') }}" alt="Logo SILAPAT" class="logo-silapat">
+                    <div>
+                        <h1 class="text-lg (20px) font-bold text-gray-800 leading-tight">Sistem Informasi Laporan Pendapatan Terpadu</h1>
+                        <!-- <p class="text-xs text-gray-600 leading-tight mt-0.5">Sistem Informasi Laporan Pendapatan Terpadu</p> -->
+                        <p class="text-[14px] text-gray-500 leading-tight mt-0.5">Badan Pengelolaan Keuangan, Pendapatan dan Aset Daerah Kota Banjarmasin</p>
                     </div>
-                    <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
-                        <label class="form-label text-muted small mb-2">Filter Tahun</label>
-                        <select class="form-select" x-model="selectedYear" @change="loadData()" style="max-width: 200px; margin-left: auto;">
-                            <option value="2023">2023</option>
+                </div>
+                
+                <!-- Year Filter & Login -->
+                <div class="flex items-center gap-2.5">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Tahun Anggaran:</label>
+                        <select 
+                            x-model="selectedYear" 
+                            @change="fetchAllData()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
                             <option value="2024">2024</option>
                             <option value="2025" selected>2025</option>
                         </select>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Summary Cards - 4 Category Breakdown -->
-    <div class="row g-3 mb-4">
-        <!-- Card 1: Total Pendapatan Daerah -->
-        <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="100">
-            <div class="category-card">
-                <div class="category-card-header">
-                    <div class="category-card-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <i class='bx bx-bar-chart-alt-2'></i>
-                    </div>
-                    <div class="category-card-title">Total Pendapatan Daerah</div>
-                    <div class="category-card-subtitle">Realisasi vs Target</div>
-                </div>
-                <div class="category-card-body">
-                    <div class="category-card-amount" x-text="formatCurrencyFull(summary.total?.realisasi || 0)"></div>
-                    <div class="progress-modern mt-2" style="height: 8px;">
-                        <div class="progress-bar-gradient" 
-                             :style="'width: ' + Math.min(summary.total?.persentase || 0, 100) + '%'">
-                        </div>
-                    </div>
-                    <div class="category-card-details mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Target:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.total?.target || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Kurang:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.total?.kurang || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted small">Persentase:</span>
-                            <span class="badge" 
-                                  :class="(summary.total?.persentase || 0) >= 100 ? 'badge-success' : (summary.total?.persentase || 0) >= 70 ? 'badge-warning' : 'badge-danger'"
-                                  x-text="(summary.total?.persentase || 0).toFixed(2) + '%'">
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 2: Pendapatan Asli Daerah (PAD) -->
-        <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="200">
-            <div class="category-card">
-                <div class="category-card-header">
-                    <div class="category-card-icon" style="background: linear-gradient(135deg, #71dd37 0%, #56ca00 100%);">
-                        <i class='bx bx-wallet'></i>
-                    </div>
-                    <div class="category-card-title">Pendapatan Asli Daerah</div>
-                    <div class="category-card-subtitle">Realisasi vs Target</div>
-                </div>
-                <div class="category-card-body">
-                    <div class="category-card-amount" x-text="formatCurrencyFull(summary.pad?.realisasi || 0)"></div>
-                    <div class="progress-modern mt-2" style="height: 8px;">
-                        <div class="progress-bar" 
-                             style="background: linear-gradient(135deg, #71dd37 0%, #56ca00 100%);"
-                             :style="'width: ' + Math.min(summary.pad?.persentase || 0, 100) + '%'">
-                        </div>
-                    </div>
-                    <div class="category-card-details mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Target:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.pad?.target || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Kurang:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.pad?.kurang || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted small">Persentase:</span>
-                            <span class="badge" 
-                                  :class="(summary.pad?.persentase || 0) >= 100 ? 'badge-success' : (summary.pad?.persentase || 0) >= 70 ? 'badge-warning' : 'badge-danger'"
-                                  x-text="(summary.pad?.persentase || 0).toFixed(2) + '%'">
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 3: Pendapatan Transfer -->
-        <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="300">
-            <div class="category-card">
-                <div class="category-card-header">
-                    <div class="category-card-icon" style="background: linear-gradient(135deg, #03c3ec 0%, #0288d1 100%);">
-                        <i class='bx bx-transfer'></i>
-                    </div>
-                    <div class="category-card-title">Pendapatan Transfer</div>
-                    <div class="category-card-subtitle">Realisasi vs Target</div>
-                </div>
-                <div class="category-card-body">
-                    <div class="category-card-amount" x-text="formatCurrencyFull(summary.transfer?.realisasi || 0)"></div>
-                    <div class="progress-modern mt-2" style="height: 8px;">
-                        <div class="progress-bar" 
-                             style="background: linear-gradient(135deg, #03c3ec 0%, #0288d1 100%);"
-                             :style="'width: ' + Math.min(summary.transfer?.persentase || 0, 100) + '%'">
-                        </div>
-                    </div>
-                    <div class="category-card-details mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Target:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.transfer?.target || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Kurang:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.transfer?.kurang || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted small">Persentase:</span>
-                            <span class="badge" 
-                                  :class="(summary.transfer?.persentase || 0) >= 100 ? 'badge-success' : (summary.transfer?.persentase || 0) >= 70 ? 'badge-warning' : 'badge-danger'"
-                                  x-text="(summary.transfer?.persentase || 0).toFixed(2) + '%'">
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 4: Lain-Lain Pendapatan -->
-        <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="400">
-            <div class="category-card">
-                <div class="category-card-header">
-                    <div class="category-card-icon" style="background: linear-gradient(135deg, #ffab00 0%, #ff6f00 100%);">
-                        <i class='bx bx-collection'></i>
-                    </div>
-                    <div class="category-card-title">Lain-Lain Pendapatan</div>
-                    <div class="category-card-subtitle">Realisasi vs Target</div>
-                </div>
-                <div class="category-card-body">
-                    <div class="category-card-amount" x-text="formatCurrencyFull(summary.lain_lain?.realisasi || 0)"></div>
-                    <div class="progress-modern mt-2" style="height: 8px;">
-                        <div class="progress-bar" 
-                             style="background: linear-gradient(135deg, #ffab00 0%, #ff6f00 100%);"
-                             :style="'width: ' + Math.min(summary.lain_lain?.persentase || 0, 100) + '%'">
-                        </div>
-                    </div>
-                    <div class="category-card-details mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Target:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.lain_lain?.target || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-muted small">Kurang:</span>
-                            <span class="fw-semibold small" x-text="formatCurrencyFull(summary.lain_lain?.kurang || 0)"></span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted small">Persentase:</span>
-                            <span class="badge" 
-                                  :class="(summary.lain_lain?.persentase || 0) >= 100 ? 'badge-success' : (summary.lain_lain?.persentase || 0) >= 70 ? 'badge-warning' : 'badge-danger'"
-                                  x-text="(summary.lain_lain?.persentase || 0).toFixed(2) + '%'">
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Monthly Trend Chart -->
-    <div class="row mb-4">
-        <div class="col-12" data-aos="fade-up" data-aos-delay="500">
-            <div class="chart-container">
-                <div class="chart-header">
-                    <div>
-                        <h3 class="chart-title">Trend Penerimaan Bulanan</h3>
-                        <p class="chart-subtitle mb-0">Breakdown per kategori pendapatan</p>
-                    </div>
-                    <div>
-                        <button class="btn btn-sm btn-outline-primary" @click="refreshData()">
-                            <i class='bx bx-refresh'></i>
-                        </button>
-                    </div>
-                </div>
-                <div id="monthlyTrendChart"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Top Categories & Year Comparison -->
-    <div class="row g-3 mb-4">
-        <!-- Top 5 Categories -->
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="600">
-            <div class="card-modern p-4">
-                <h5 class="mb-4">
-                    <i class='bx bx-chart text-primary me-2'></i>
-                    Top 5 Sumber Pendapatan
-                </h5>
-                <template x-for="(item, index) in topCategories" :key="index">
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <div class="d-flex align-items-center">
-                                <span class="badge bg-primary me-2" x-text="index + 1" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"></span>
-                                <span class="fw-semibold small" x-text="item.nama"></span>
-                            </div>
-                            <span class="text-primary fw-bold" x-text="formatCurrencyShort(item.realisasi)"></span>
-                        </div>
-                        <div class="progress-modern">
-                            <div class="progress-bar-gradient" 
-                                 :style="'width: ' + item.persentase + '%'">
-                            </div>
-                        </div>
-                        <div class="small text-muted mt-1" x-text="item.persentase.toFixed(1) + '% dari total'"></div>
-                    </div>
-                </template>
-            </div>
-        </div>
-
-        <!-- Year Comparison -->
-        <div class="col-lg-6" data-aos="fade-up" data-aos-delay="700">
-            <div class="chart-container">
-                <div class="chart-header">
-                    <div>
-                        <h5 class="chart-title mb-0">Perbandingan Antar Tahun</h5>
-                        <p class="chart-subtitle mb-0">3 Tahun Terakhir</p>
-                    </div>
-                </div>
-                <div id="yearComparisonChart"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- SKPD Realisasi Table -->
-    <div class="row">
-        <div class="col-12" data-aos="fade-up" data-aos-delay="800">
-            <div class="card-modern p-4">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h5 class="mb-1">
-                            <i class='bx bx-building text-primary me-2'></i>
-                            Realisasi Penerimaan per SKPD
-                        </h5>
-                        <p class="text-muted small mb-0">Total: <span x-text="skpdData.length"></span> SKPD</p>
-                    </div>
-                    <button class="btn btn-sm btn-primary-gradient" @click="exportTableToCSV('#skpdTable', 'realisasi-skpd.csv')">
-                        <i class='bx bx-download me-1'></i> Export CSV
+                    
+                    <button 
+                        @click="fetchAllData()" 
+                        class="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors mt-5"
+                        title="Refresh Data"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
                     </button>
-                </div>
-
-                <!-- Search -->
-                <div class="mb-3">
-                    <input type="text" 
-                           class="form-control" 
-                           placeholder="Cari SKPD..."
-                           x-model="searchSkpd"
-                           style="max-width: 300px;">
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table-modern" id="skpdTable">
-                        <thead>
-                            <tr>
-                                <th width="5%">No</th>
-                                <th width="12%">Kode</th>
-                                <th width="35%">Nama SKPD</th>
-                                <th width="15%" class="text-end">Target</th>
-                                <th width="15%" class="text-end">Realisasi</th>
-                                <th width="10%" class="text-center">%</th>
-                                <th width="8%" class="text-center">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="(skpd, index) in filteredSkpdData" :key="index">
-                                <tr>
-                                    <td x-text="index + 1"></td>
-                                    <td x-text="skpd.kode"></td>
-                                    <td x-text="skpd.nama"></td>
-                                    <td class="text-end" x-text="formatCurrencyShort(skpd.target)"></td>
-                                    <td class="text-end" x-text="formatCurrencyShort(skpd.realisasi)"></td>
-                                    <td class="text-center">
-                                        <span class="badge" 
-                                              :class="skpd.persentase >= 100 ? 'badge-success' : skpd.persentase >= 70 ? 'badge-warning' : 'badge-danger'"
-                                              x-text="skpd.persentase.toFixed(1) + '%'">
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge" 
-                                              :class="skpd.persentase >= 100 ? 'badge-success' : skpd.persentase >= 70 ? 'badge-warning' : 'badge-danger'"
-                                              x-text="skpd.status">
-                                        </span>
-                                    </td>
-                                </tr>
-                            </template>
-                            <template x-if="filteredSkpdData.length === 0">
-                                <tr>
-                                    <td colspan="7" class="text-center py-4 text-muted">
-                                        <i class='bx bx-search bx-lg d-block mb-2'></i>
-                                        Tidak ada data SKPD
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                    
+                    <a 
+                        href="/login" 
+                        class="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md mt-5 flex items-center gap-2 text-sm font-medium"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                        </svg>
+                        Login
+                    </a>
                 </div>
             </div>
         </div>
+        
+        <!-- Info Banner -->
+        <div class="info-banner-section px-5">
+            <div class="h-full bg-cyan-50 border border-cyan-200 rounded-lg px-4 flex items-center gap-2.5">
+                <svg class="w-4 h-4 text-cyan-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                </svg>
+                <div class="flex-1 flex items-center justify-between">
+    <div class="flex items-center gap-1 text-sm">    <!-- ← Dari text-xs → text-sm -->
+        <span class="text-gray-700">Data terakhir:</span>
+        <span class="font-semibold text-cyan-900" x-text="lastUpdate"></span>
     </div>
-
-    <!-- Loading Overlay -->
-    <div x-show="loading" 
-         x-transition
-         class="loading-overlay">
-        <div class="spinner-modern"></div>
-        <div class="loading-text">Memuat data...</div>
+    <div class="flex items-center gap-4 text-sm">    <!-- ← Dari text-xs → text-sm -->
+        <div>
+            <span class="text-gray-600">Total Transaksi:</span>
+            <span class="font-semibold text-cyan-900 ml-1" x-text="totalTransaksi"></span>
+        </div>
+        <div>
+            <span class="text-gray-600">SKPD:</span>
+            <span class="font-semibold text-cyan-900 ml-1" x-text="skpdInput"></span>
+        </div>
+        <div>
+            <span class="text-gray-600">Capaian:</span>
+            <span class="font-semibold text-cyan-900 ml-1" x-text="capaianTotal"></span>
+        </div>
     </div>
-
 </div>
-@endsection
-
-@push('scripts')
-<script>
-function publicDashboard() {
-    return {
-        // State
-        selectedYear: {{ $tahun }},
-        loading: false,
-        searchSkpd: '',
+            </div>
+        </div>
         
-        // Data - Updated structure for 4 categories
-        summary: {
-            total: {
-                realisasi: 0,
-                target: 0,
-                kurang: 0,
-                persentase: 0
-            },
-            pad: {
-                realisasi: 0,
-                target: 0,
-                kurang: 0,
-                persentase: 0
-            },
-            transfer: {
-                realisasi: 0,
-                target: 0,
-                kurang: 0,
-                persentase: 0
-            },
-            lain_lain: {
-                realisasi: 0,
-                target: 0,
-                kurang: 0,
-                persentase: 0
-            },
-            update_terakhir: '-',
-            tahun: {{ $tahun }}
-        },
-        skpdData: [],
-        topCategories: [],
-        
-        // Charts
-        monthlyChart: null,
-        yearChart: null,
-        
-        // Init
-        async init() {
-            console.log('Initializing Public Dashboard...');
-            await this.loadData();
-        },
-        
-        // Load all data
-        async loadData() {
-            this.loading = true;
+        <!-- Main Content -->
+        <div class="dashboard-content">
             
-            try {
-                await Promise.all([
-                    this.loadSummary(),
-                    this.loadSkpdData(),
-                    this.loadTopCategories(),
-                    this.loadMonthlyTrend(),
-                    this.loadYearComparison()
-                ]);
-            } catch (error) {
-                console.error('Load data error:', error);
-                this.showToast('Gagal memuat data', 'error');
-            } finally {
-                this.loading = false;
-            }
-        },
-        
-        // Load summary
-        async loadSummary() {
-            const response = await fetch(`/api/public/summary?tahun=${this.selectedYear}`);
-            const result = await response.json();
+            <!-- Top Row: Cards (Left) + Table (Right) -->
+            <div class="top-row">
+                
+                <!-- LEFT COLUMN: Cards -->
+                <div class="left-column">
+                    
+                    <!-- Big Card: Total Pendapatan Daerah -->
+                    <div class="card-big gradient-purple text-white rounded-xl p-4 shadow-lg">
+                        <div class="flex items-start justify-between mb-2.5">
+                            <div class="flex-1">
+    <p class="text-white/90 text-lg (18px)) font-semibold mb-0.5">Total Pendapatan Daerah</p>
+    <p class="text-base (14px) text-white/70">Realisasi vs Target</p>
+</div>
+                            <div class="bg-white/20 p-2 rounded-lg">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-2.5">
+                            <h2 class="text-2xl font-bold mb-0.5" x-text="formatRupiahID(summary.total?.realisasi || 0)"></h2>
+                            <p class="text-sm (14px) text-white/80">
+                                <span x-text="formatPercentage(summary.total?.persentase || 0)"></span> dari target <span class="text-sm (14px)" x-text="formatRupiahID(summary.total?.target || 0)"></span>
+                            </p>
+                        </div>
+                        
+                        <div class="progress-bar">
+                            <div class="progress-fill" :style="`width: ${summary.total?.persentase || 0}%`"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Small Cards: PAD, Transfer, Lain-lain -->
+                    <div class="cards-small-container">
+                        
+                        <!-- Card PAD -->
+                        <div class="gradient-green text-white rounded-lg p-3 shadow">
+                            <div class="flex items-start justify-between mb-2">
+                               <p class="text-white/90 text-lg (18px) font-semibold flex-1">PAD</p>
+                                <div class="bg-white/20 p-1.5 rounded">
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                            <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.pad?.realisasi || 0)"></h3>
+                            
+                            <div class="progress-bar mb-1.5">
+                                <div class="progress-fill" :style="`width: ${summary.pad?.persentase || 0}%`"></div>
+                            </div>
+                            
+                            <p class="text-sm (14px) text-white/80">
+                                <span class="font-semibold" x-text="formatPercentage(summary.pad?.persentase || 0)"></span> dari target
+                            </p>
+                        </div>
+                        
+                        <!-- Card Transfer -->
+                        <div class="gradient-cyan text-white rounded-lg p-3 shadow">
+                            <div class="flex items-start justify-between mb-2">
+                               <p class="text-white/90 text-lg (18px) font-semibold flex-1">Transfer</p>
+                                <div class="bg-white/20 p-1.5 rounded">
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                            <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.transfer?.realisasi || 0)"></h3>
+                            
+                            <div class="progress-bar mb-1.5">
+                                <div class="progress-fill" :style="`width: ${summary.transfer?.persentase || 0}%`"></div>
+                            </div>
+                            
+                            <p class="text-sm (14px) text-white/80">
+                                <span class="font-semibold" x-text="formatPercentage(summary.transfer?.persentase || 0)"></span> dari target
+                            </p>
+                        </div>
+                        
+                        <!-- Card Lain-lain -->
+                        <div class="gradient-orange text-white rounded-lg p-3 shadow">
+                            <div class="flex items-start justify-between mb-2">
+                                <p class="text-white/90 text-lg (18px) font-semibold flex-1">Lain-lain</p>
+                                <div class="bg-white/20 p-1.5 rounded">
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                           <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.lain?.realisasi || 0)"></h3>
+                            
+                            <div class="progress-bar mb-1.5">
+                                <div class="progress-fill" :style="`width: ${summary.lain?.persentase || 0}%`"></div>
+                            </div>
+                            
+                            <p class="text-sm (14px) text-white/80">
+                                <span class="font-semibold" x-text="formatPercentage(summary.lain?.persentase || 0)"></span> dari target
+                            </p>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- RIGHT COLUMN: Table SKPD -->
+                <div class="right-column">
+                    <div class="table-container" x-ref="tableContainer">
+                        <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-lg font-semibold text-gray-800">Realisasi Penerimaan per SKPD</h3>
+                                <span class="text-xs text-gray-600">Total: <span class="font-semibold" x-text="skpdData.length"></span> SKPD</span>
+                            </div>
+                        </div>
+                        
+                        <table class="table-skpd">
+                            <thead>
+                                <tr>
+                                    <!-- <th class="w-8">NO</th> -->
+                                    <th>NAMA SKPD</th>
+                                    <th class="text-right w-48">REALISASI</th>
+                                    <th class="text-center w-16">%</th>
+                                    <!-- <th class="text-center w-20">STATUS</th> -->
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(skpd, index) in skpdData" :key="index">
+                                    <tr>
+                                        <!-- <td class="text-gray-500 text-center" x-text="index + 1"></td> -->
+                                        <td class="font-medium text-gray-900" x-text="skpd.nama"></td>
+                                        <td class="text-right font-semibold text-gray-900" x-text="formatRupiahID(skpd.realisasi)"></td>
+                                        <td class="text-center">
+                                            <span 
+                                               class="px-2 py-1 rounded-full text-xs font-semibold inline-block"
+                                                :class="skpd.persentase >= 85 ? 'bg-green-100 text-green-800' : skpd.persentase >= 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'"
+                                                x-text="formatPercentage(skpd.persentase)"
+                                            ></span>
+                                        </td>
+                                        <!-- <td class="text-center">
+                                            <span 
+                                                class="px-2 py-0.5 rounded-full text-[10px] font-semibold inline-block"
+                                                :class="skpd.persentase >= 85 ? 'bg-yellow-400 text-white' : 'bg-red-500 text-white'"
+                                                x-text="skpd.persentase >= 85 ? 'PROSES' : 'RENDAH'"
+                                            ></span>
+                                        </td> -->
+                                    </tr>
+                                </template>
+                                
+                                <!-- Loading State -->
+                                <template x-if="loading && skpdData.length === 0">
+                                    <tr>
+                                        <td colspan="5" class="text-center py-8 text-gray-500">
+                                            <div class="flex items-center justify-center gap-2">
+                                                <svg class="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <span class="text-sm">Memuat data...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                                
+                                <!-- Empty State -->
+                                <template x-if="!loading && skpdData.length === 0">
+                                    <tr>
+                                        <td colspan="5" class="text-center py-8 text-gray-500 text-sm">
+                                            Tidak ada data SKPD
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+            </div>
             
-            if (result.success) {
-                this.summary = result.data;
-            }
-        },
-        
-        // Load SKPD data
-        async loadSkpdData() {
-            const response = await fetch(`/api/public/skpd-realisasi?tahun=${this.selectedYear}`);
-            const result = await response.json();
+            <!-- Bottom Row: Chart -->
+            <div class="bottom-row">
+                <div class="chart-container">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-800">Tren Penerimaan Bulanan</h3>
+                        <span class="text-sm font-semibold text-gray-600">Tahun <span x-text="selectedYear"></span></span>
+                    </div>
+                    <div id="monthlyChart" class="flex-1"></div>
+                </div>
+            </div>
             
-            if (result.success) {
-                this.skpdData = result.data;
-            }
-        },
+        </div>
         
-        // Load top categories
-        async loadTopCategories() {
-            const response = await fetch(`/api/public/top-categories?tahun=${this.selectedYear}&limit=5`);
-            const result = await response.json();
-            
-            if (result.success) {
-                this.topCategories = result.data;
-            }
-        },
-        
-        // Load monthly trend
-        async loadMonthlyTrend() {
-            const response = await fetch(`/api/public/monthly-trend?tahun=${this.selectedYear}`);
-            const result = await response.json();
-            
-            if (result.success) {
-                this.renderMonthlyChart(result.data);
-            }
-        },
-        
-        // Load year comparison
-        async loadYearComparison() {
-            const response = await fetch(`/api/public/yearly-comparison?tahun=${this.selectedYear}&years=3`);
-            const result = await response.json();
-            
-            if (result.success) {
-                this.renderYearChart(result.data);
-            }
-        },
-        
-        // Render monthly chart
-        renderMonthlyChart(data) {
-            if (this.monthlyChart) {
-                this.monthlyChart.destroy();
-            }
-            
-            const options = {
-                series: data.series,
-                chart: {
-                    type: 'bar',
-                    height: 350,
-                    stacked: false,
-                    ...window.publicChartDefaults.chart
+        <!-- Footer -->
+        <div class="dashboard-footer bg-gray-800 flex items-center justify-center px-5">
+            <p class="text-xs text-gray-400">
+                © 2025 Badan Pengelolaan Keuangan, Pendapatan dan Aset Daerah Kota Banjarmasin
+                <span class="text-gray-500 mx-2">•</span>
+                <span class="text-gray-300">Developed by Aulia Mayrina Rahmi</span>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        function publicDashboard() {
+            return {
+                selectedYear: 2025,
+                loading: false,
+                summary: {
+                    total: null,
+                    pad: null,
+                    transfer: null,
+                    lain: null
                 },
-                plotOptions: {
-                    bar: {
-                        horizontal: false,
-                        columnWidth: '60%',
-                        endingShape: 'rounded'
+                skpdData: [],
+                monthlyChart: null,
+                autoScrollInterval: null,
+                isHovering: false,
+                
+                // Info banner
+                lastUpdate: '13 November 2025',
+                totalTransaksi: '15.686',
+                skpdInput: '10',
+                capaianTotal: '94.8%',
+                
+                init() {
+                    this.fetchAllData();
+                    this.startAutoScroll();
+                },
+                
+                async fetchAllData() {
+                    this.loading = true;
+                    
+                    try {
+                        await Promise.all([
+                            this.fetchSummary(),
+                            this.fetchSkpdData(),
+                            this.fetchMonthlyTrend()
+                        ]);
+                    } catch (error) {
+                        console.error('Error fetching data:', error);
+                    } finally {
+                        this.loading = false;
                     }
                 },
-                xaxis: {
-                    categories: data.categories
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function(val) {
-                            return window.formatCurrency(val, { useShortFormat: true });
+                
+                async fetchSummary() {
+                    try {
+                        const response = await fetch(`/api/public/summary?tahun=${this.selectedYear}`);
+                        const result = await response.json();
+                        
+                        if (result.success && result.data) {
+                            const data = result.data;
+                            
+                            // Map categories
+                            if (data.categories && Array.isArray(data.categories)) {
+                                this.summary = {
+                                    total: data.categories.find(c => c.id === 'total') || {},
+                                    pad: data.categories.find(c => c.id === 'pad') || {},
+                                    transfer: data.categories.find(c => c.id === 'transfer') || {},
+                                    lain: data.categories.find(c => c.id === 'lain') || {}
+                                };
+                            }
+                            
+                            // Update info banner
+                            if (data.update_terakhir) {
+                                this.lastUpdate = data.update_terakhir;
+                            }
+                            
+                            if (data.total_transaksi) {
+                                this.totalTransaksi = data.total_transaksi.toLocaleString('id-ID');
+                            }
+                            
+                            if (data.skpd_count) {
+                                this.skpdInput = data.skpd_count;
+                            }
+                            
+                            if (data.persentase_capaian) {
+                                this.capaianTotal = this.formatPercentage(data.persentase_capaian);
+                            }
                         }
+                    } catch (error) {
+                        console.error('Error fetching summary:', error);
                     }
                 },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return window.formatCurrency(val);
+                
+                async fetchSkpdData() {
+                    try {
+                        const response = await fetch(`/api/public/skpd-realisasi?tahun=${this.selectedYear}`);
+                        const result = await response.json();
+                        
+                        if (result.success && result.data) {
+                            this.skpdData = result.data;
                         }
+                    } catch (error) {
+                        console.error('Error fetching SKPD data:', error);
                     }
                 },
-                colors: ['#667eea', '#71dd37', '#ffab00'],
-                ...window.publicChartDefaults
-            };
-            
-            this.monthlyChart = new ApexCharts(document.querySelector("#monthlyTrendChart"), options);
-            this.monthlyChart.render();
-        },
-        
-        // Render year chart
-        renderYearChart(data) {
-            if (this.yearChart) {
-                this.yearChart.destroy();
-            }
-            
-            const options = {
-                series: data.series,
-                chart: {
-                    type: 'bar',
-                    height: 280,
-                    ...window.publicChartDefaults.chart
-                },
-                plotOptions: {
-                    bar: {
-                        horizontal: false,
-                        columnWidth: '50%',
-                        endingShape: 'rounded'
-                    }
-                },
-                xaxis: {
-                    categories: data.categories
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function(val) {
-                            return window.formatCurrency(val, { useShortFormat: true });
+                
+                async fetchMonthlyTrend() {
+                    try {
+                        const response = await fetch(`/api/public/monthly-trend?tahun=${this.selectedYear}`);
+                        const result = await response.json();
+                        
+                        if (result.success && result.data) {
+                            this.renderMonthlyChart(result.data);
                         }
+                    } catch (error) {
+                        console.error('Error fetching monthly trend:', error);
                     }
                 },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return window.formatCurrency(val);
-                        }
-                    }
-                },
-                colors: ['#667eea'],
-                ...window.publicChartDefaults
-            };
-            
-            this.yearChart = new ApexCharts(document.querySelector("#yearComparisonChart"), options);
-            this.yearChart.render();
-        },
-        
-        // Refresh data
-        async refreshData() {
-            await this.loadData();
-            this.showToast('Data berhasil dimuat ulang', 'success');
-        },
-        
-        // Computed: Filtered SKPD
-        get filteredSkpdData() {
-            if (!this.searchSkpd) return this.skpdData;
-            
-            const search = this.searchSkpd.toLowerCase();
-            return this.skpdData.filter(skpd => 
-                skpd.nama.toLowerCase().includes(search) ||
-                skpd.kode.toLowerCase().includes(search)
-            );
-        },
-        
-        // Helpers
-        formatCurrency(value) {
-            return window.formatCurrency(value);
-        },
-        
-        formatCurrencyShort(value) {
-            return window.formatCurrency(value, { useShortFormat: true });
-        },
-        
-        // ✨ NEW: Format currency FULL (no short format)
-        formatCurrencyFull(value) {
-            if (!value || value === 0) return 'Rp 0';
-            
-            const formatted = new Intl.NumberFormat('id-ID', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0
-            }).format(Math.abs(value));
-            
-            return 'Rp ' + formatted;
-        },
-        
-        showToast(message, type) {
-            if (typeof window.showToast === 'function') {
-                window.showToast(message, type);
-            }
-        },
-        
-        exportTableToCSV(selector, filename) {
-            if (typeof window.exportTableToCSV === 'function') {
-                window.exportTableToCSV(selector, filename);
-            }
+                
+                renderMonthlyChart(data) {
+                    const options = {
+                        series: data.series || [],
+                        chart: {
+                            type: 'bar',
+                            height: '100%',
+                            toolbar: {
+                                show: false
+                            },
+                            fontFamily: 'inherit'
+                        },
+                        plotOptions: {
+                            bar: {
+                                horizontal: false,
+                                columnWidth: '70%',
+                                borderRadius: 4
+                            }
+                        },
+                        dataLabels: {
+                            enabled: false
+                        },
+                        stroke: {
+                            show: true,
+                            width: 2,
+                            colors: ['transparent']
+                        },
+                     xaxis: {
+    categories: data.categories || [],
+    labels: {
+        style: {
+            fontSize: '14px',      // ← Dari 10px → 12px
+            fontWeight: 500,       // ← Lebih tebal
+            colors: ['#374151']    // ← Warna lebih gelap
         }
     }
-}
-</script>
-@endpush
+},
+yaxis: {
+    labels: {
+        formatter: (value) => this.formatShortRupiah(value),
+        style: {
+            fontSize: '12px',      // ← Dari 10px → 12px
+            fontWeight: 500,       // ← Lebih tebal
+            colors: ['#374151']    // ← Warna lebih gelap
+        }
+    }
+},
+tooltip: {
+    y: {
+        formatter: (value) => this.formatRupiahID(value)
+    },
+    style: {
+        fontSize: '13px',         // ← Dari 11px → 13px
+        fontFamily: 'inherit'
+    }
+},
+legend: {
+    position: 'top',
+    horizontalAlign: 'right',
+    fontSize: '13px',             // ← Dari 10px → 12px
+    fontWeight: 600,              // ← Lebih tebal
+    markers: {
+        width: 13,                // ← Dari 10px → 12px
+        height: 13,               // ← Dari 10px → 12px
+        radius: 3
+    },
+    labels: {
+        colors: ['#374151']       // ← Warna lebih gelap
+    }
+},
+                        colors: ['#10b981', '#06b6d4', '#f59e0b'],
+                        grid: {
+                            borderColor: '#e5e7eb',
+                            strokeDashArray: 4,
+                            xaxis: {
+                                lines: {
+                                    show: false
+                                }
+                            },
+                            yaxis: {
+                                lines: {
+                                    show: true
+                                }
+                            },
+                            padding: {
+                                top: 0,
+                                right: 10,
+                                bottom: 0,
+                                left: 10
+                            }
+                        }
+                    };
+                    
+                    // Destroy existing chart
+                    if (this.monthlyChart) {
+                        this.monthlyChart.destroy();
+                    }
+                    
+                    // Render new chart
+                    this.monthlyChart = new ApexCharts(document.querySelector("#monthlyChart"), options);
+                    this.monthlyChart.render();
+                },
+                
+                // Auto-scroll table function
+                startAutoScroll() {
+                    const container = this.$refs.tableContainer;
+                    
+                    if (!container) return;
+                    
+                    // Pause on hover
+                    container.addEventListener('mouseenter', () => {
+                        this.isHovering = true;
+                    });
+                    
+                    container.addEventListener('mouseleave', () => {
+                        this.isHovering = false;
+                    });
+                    
+                    // Auto scroll every 5 seconds
+                    this.autoScrollInterval = setInterval(() => {
+                        if (this.isHovering || this.skpdData.length === 0) return;
+                        
+                        const scrollHeight = container.scrollHeight;
+                        const clientHeight = container.clientHeight;
+                        const currentScroll = container.scrollTop;
+                        
+                        // Check if we're at the bottom
+                        if (currentScroll + clientHeight >= scrollHeight - 10) {
+                            // Scroll back to top
+                            container.scrollTop = 0;
+                        } else {
+                            // Smooth scroll down by 60px
+                            container.scrollTop += 60;
+                        }
+                    }, 5000); // 5 seconds
+                },
+                
+                // Format Indonesian Rupiah with thousand separator (.) and decimal (,)
+                formatRupiahID(value) {
+                    if (!value) return 'Rp 0,00';
+                    
+                    const formatter = new Intl.NumberFormat('id-ID', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                    
+                    return 'Rp ' + formatter.format(value);
+                },
+                
+                formatShortRupiah(value) {
+                    if (!value) return 'Rp 0';
+                    
+                    if (value >= 1000000000000) {
+                        return 'Rp ' + (value / 1000000000000).toFixed(2).replace('.', ',') + ' T';
+                    } else if (value >= 1000000000) {
+                        return 'Rp ' + (value / 1000000000).toFixed(2).replace('.', ',') + ' M';
+                    } else if (value >= 1000000) {
+                        return 'Rp ' + (value / 1000000).toFixed(2).replace('.', ',') + ' Jt';
+                    }
+                    
+                    return 'Rp ' + new Intl.NumberFormat('id-ID').format(value);
+                },
+                
+                formatPercentage(value) {
+                    if (!value) return '0,00%';
+                    return value.toFixed(2).replace('.', ',') + '%';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

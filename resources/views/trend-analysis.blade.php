@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Trend Analysis - Penerimaan Daerah')
+@section('title', 'SILAPAT - BPKPAD Banjarmasin')
 
 @section('content')
 <div class="container-fluid">

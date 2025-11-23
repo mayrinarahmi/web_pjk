@@ -41,18 +41,19 @@ Route::get('/test-route', function() {
     return view('welcome'); // Laravel default view
 });
 
-Route::get('/test-public-view', function() {
+Route::get('/', function () {
+    // Langsung tampilkan public dashboard
     return view('public-dashboard.index', ['tahun' => 2025]);
 });
 
 
 // Route untuk halaman utama - cek apakah user sudah login
-Route::get('/', function () {
-    if (Auth::check()) {
-        return redirect()->route('dashboard');
-    }
-    return redirect()->route('login');
-});
+// Route::get('/', function () {
+//     if (Auth::check()) {
+//         return redirect()->route('dashboard');
+//     }
+//     return redirect()->route('login');
+// });
 
 // Public Dashboard - Main Page
 Route::get('/dashboard-publik', [PublicDashboardController::class, 'index'])

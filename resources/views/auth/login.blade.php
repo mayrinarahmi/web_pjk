@@ -60,6 +60,22 @@
                     <div class="mb-3">
                         <button type="submit" class="btn-login w-100">Login</button>
                     </div>
+                    
+                    <!-- Tambahan: Dashboard Publik Button -->
+                    <div class="text-center">
+                        <div class="separator mb-3">
+                            <span class="separator-text">atau</span>
+                        </div>
+                        <a href="{{ url('/') }}" class="btn-dashboard-publik w-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-dashboard">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                            </svg>
+                            Lihat Dashboard Pendapatan
+                        </a>
+                    </div>
                 </form>
             </div>
         </div>
@@ -116,6 +132,67 @@
     color: white;
 }
 
+/* Separator Style */
+.separator {
+    position: relative;
+    text-align: center;
+}
+
+.separator::before,
+.separator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background-color: #d1d5db;
+}
+
+.separator::before {
+    left: 0;
+}
+
+.separator::after {
+    right: 0;
+}
+
+.separator-text {
+    background-color: white;
+    padding: 0 10px;
+    color: #9ca3af;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Dashboard Publik Button Style */
+.btn-dashboard-publik {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    background-color: transparent;
+    color: #6366f1;
+    border: 2px solid #6366f1;
+    border-radius: 8px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.3s;
+}
+
+.btn-dashboard-publik:hover {
+    background-color: #6366f1;
+    color: white;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.2);
+}
+
+.icon-dashboard {
+    flex-shrink: 0;
+}
+
 .form-control {
     border-radius: 8px;
     border: 1px solid #d1d5db;
@@ -140,6 +217,11 @@
     
     .login-title {
         font-size: 1rem !important;
+    }
+    
+    .btn-dashboard-publik {
+        font-size: 0.875rem;
+        padding: 10px;
     }
 }
 </style>

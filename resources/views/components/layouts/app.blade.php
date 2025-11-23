@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $title ?? 'Pajak Daerah' }}</title>
+  <link rel="icon" href="{{ asset('images/silapat-favicon.png') }}">
+<title>@yield('title', 'SILAPAT - BPKPAD Banjarmasin')</title>
     
     <!-- Styles -->
     <link rel="stylesheet" href="{{ asset('sneat-template/assets/vendor/fonts/boxicons.css') }}" />

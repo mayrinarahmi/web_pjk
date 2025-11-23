@@ -69,6 +69,7 @@ class SkpdSeeder extends Seeder
                 'nama_opd' => 'BADAN PENGELOLAAN KEUANGAN, PENDAPATAN DAN ASET DAERAH',
                 'status' => 'aktif'
             ],
+            
         ];
 
         foreach ($skpdData as $data) {

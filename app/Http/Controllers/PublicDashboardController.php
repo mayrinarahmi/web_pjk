@@ -8,7 +8,6 @@ use App\Models\Penerimaan;
 use App\Models\TargetAnggaran;
 use App\Models\TahunAnggaran;
 use App\Models\Skpd;
-use App\Services\TrendAnalysisService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -20,19 +19,6 @@ class PublicDashboardController extends Controller
      * Cache duration in seconds (1 hour)
      */
     protected $cacheTime = 3600;
-    
-    /**
-     * Trend Analysis Service
-     */
-    protected $trendService;
-    
-    /**
-     * Constructor - Inject TrendAnalysisService
-     */
-    public function __construct(TrendAnalysisService $trendService)
-    {
-        $this->trendService = $trendService;
-    }
 
     /**
      * Display public dashboard
@@ -52,13 +38,13 @@ class PublicDashboardController extends Controller
 
     /**
      * Get summary data for public dashboard
-     * Returns: 4 kategori breakdown (Total, PAD, Transfer, Lain-lain)
+     * Returns: Total penerimaan, Bulan ini, Capaian, Update terakhir
      */
     public function getSummary(Request $request)
     {
         try {
             $tahun = $request->input('tahun', date('Y'));
-            $cacheKey = "public_summary_v2_{$tahun}";
+            $cacheKey = "public_summary_{$tahun}";
             
             $data = Cache::remember($cacheKey, $this->cacheTime, function () use ($tahun) {
                 
@@ -71,69 +57,29 @@ class PublicDashboardController extends Controller
                     $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)->first();
                 }
                 
-                if (!$tahunAnggaran) {
-                    return $this->getEmptyCategoryBreakdown();
+                // Root kode rekening (4 = Pendapatan)
+                $rootKode = KodeRekening::where('kode', '4')->first();
+                
+                if (!$rootKode || !$tahunAnggaran) {
+                    return $this->getEmptySummary();
                 }
                 
-                // Get Level 1 dan Level 2 kode rekening
-                $rootKode = KodeRekening::where('kode', '4')->first(); // Level 1
-                $padKode = KodeRekening::where('kode', '4.1')->first(); // PAD
-                $transferKode = KodeRekening::where('kode', '4.2')->first(); // Transfer
-                $lainLainKode = KodeRekening::where('kode', '4.3')->first(); // Lain-lain
-                
-                if (!$rootKode) {
-                    return $this->getEmptyCategoryBreakdown();
-                }
-                
-                // TOTAL PENDAPATAN DAERAH (Level 1: 4)
+                // Total Target (Konsolidasi)
                 $totalTarget = $rootKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
+                
+                // Total Realisasi (Tahun ini)
                 $totalRealisasi = Penerimaan::where('tahun', $tahun)->sum('jumlah');
-                $totalKurang = $totalTarget - $totalRealisasi;
-                $totalPersentase = $totalTarget > 0 ? ($totalRealisasi / $totalTarget) * 100 : 0;
                 
-                // PAD (Level 2: 4.1)
-                $padTarget = $padKode ? $padKode->getTargetAnggaranForTahun($tahunAnggaran->id, null) : 0;
-                $padRealisasi = 0;
-                if ($padKode) {
-                    $padLevel6Ids = KodeRekening::where('kode', 'like', '4.1%')
-                        ->where('level', 6)
-                        ->pluck('id');
-                    $padRealisasi = Penerimaan::where('tahun', $tahun)
-                        ->whereIn('kode_rekening_id', $padLevel6Ids)
-                        ->sum('jumlah');
-                }
-                $padKurang = $padTarget - $padRealisasi;
-                $padPersentase = $padTarget > 0 ? ($padRealisasi / $padTarget) * 100 : 0;
+                // Realisasi Bulan Ini
+                $bulanIni = date('n');
+                $realisasiBulanIni = Penerimaan::where('tahun', $tahun)
+                    ->whereMonth('tanggal', $bulanIni)
+                    ->sum('jumlah');
                 
-                // TRANSFER (Level 2: 4.2)
-                $transferTarget = $transferKode ? $transferKode->getTargetAnggaranForTahun($tahunAnggaran->id, null) : 0;
-                $transferRealisasi = 0;
-                if ($transferKode) {
-                    $transferLevel6Ids = KodeRekening::where('kode', 'like', '4.2%')
-                        ->where('level', 6)
-                        ->pluck('id');
-                    $transferRealisasi = Penerimaan::where('tahun', $tahun)
-                        ->whereIn('kode_rekening_id', $transferLevel6Ids)
-                        ->sum('jumlah');
-                }
-                $transferKurang = $transferTarget - $transferRealisasi;
-                $transferPersentase = $transferTarget > 0 ? ($transferRealisasi / $transferTarget) * 100 : 0;
+                // Persentase Capaian
+                $persentaseCapaian = $totalTarget > 0 ? ($totalRealisasi / $totalTarget) * 100 : 0;
                 
-                // LAIN-LAIN (Level 2: 4.3)
-                $lainLainTarget = $lainLainKode ? $lainLainKode->getTargetAnggaranForTahun($tahunAnggaran->id, null) : 0;
-                $lainLainRealisasi = 0;
-                if ($lainLainKode) {
-                    $lainLainLevel6Ids = KodeRekening::where('kode', 'like', '4.3%')
-                        ->where('level', 6)
-                        ->pluck('id');
-                    $lainLainRealisasi = Penerimaan::where('tahun', $tahun)
-                        ->whereIn('kode_rekening_id', $lainLainLevel6Ids)
-                        ->sum('jumlah');
-                }
-                $lainLainKurang = $lainLainTarget - $lainLainRealisasi;
-                $lainLainPersentase = $lainLainTarget > 0 ? ($lainLainRealisasi / $lainLainTarget) * 100 : 0;
-                
-                // Update terakhir
+                // Tanggal update terakhir
                 $latestPenerimaan = Penerimaan::where('tahun', $tahun)
                     ->orderBy('tanggal', 'desc')
                     ->first();
@@ -142,33 +88,121 @@ class PublicDashboardController extends Controller
                     ? Carbon::parse($latestPenerimaan->tanggal)->locale('id')->isoFormat('D MMMM YYYY')
                     : '-';
                 
+                // Growth calculation (compare dengan bulan lalu)
+                $bulanLalu = $bulanIni - 1;
+                $tahunBulanLalu = $tahun;
+                if ($bulanLalu < 1) {
+                    $bulanLalu = 12;
+                    $tahunBulanLalu = $tahun - 1;
+                }
+                
+                $realisasiBulanLalu = Penerimaan::where('tahun', $tahunBulanLalu)
+                    ->whereMonth('tanggal', $bulanLalu)
+                    ->sum('jumlah');
+                
+                $growthBulanIni = 0;
+                if ($realisasiBulanLalu > 0) {
+                    $growthBulanIni = (($realisasiBulanIni - $realisasiBulanLalu) / $realisasiBulanLalu) * 100;
+                }
+                
+                // Get breakdown by category (PAD, Transfer, Lain-lain)
+                $padKode = KodeRekening::where('kode', '4.1')->first();
+                $transferKode = KodeRekening::where('kode', '4.2')->first();
+                $lainLainKode = KodeRekening::where('kode', '4.3')->first();
+                
+                // PAD
+                $padTarget = 0;
+                $padRealisasi = 0;
+                if ($padKode) {
+                    $padTarget = $padKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
+                    $padIds = KodeRekening::where('kode', 'like', $padKode->kode . '%')
+                        ->where('level', 6)
+                        ->pluck('id')
+                        ->toArray();
+                    $padRealisasi = Penerimaan::where('tahun', $tahun)
+                        ->whereIn('kode_rekening_id', $padIds)
+                        ->sum('jumlah');
+                }
+                $padPersentase = $padTarget > 0 ? ($padRealisasi / $padTarget) * 100 : 0;
+                
+                // Transfer
+                $transferTarget = 0;
+                $transferRealisasi = 0;
+                if ($transferKode) {
+                    $transferTarget = $transferKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
+                    $transferIds = KodeRekening::where('kode', 'like', $transferKode->kode . '%')
+                        ->where('level', 6)
+                        ->pluck('id')
+                        ->toArray();
+                    $transferRealisasi = Penerimaan::where('tahun', $tahun)
+                        ->whereIn('kode_rekening_id', $transferIds)
+                        ->sum('jumlah');
+                }
+                $transferPersentase = $transferTarget > 0 ? ($transferRealisasi / $transferTarget) * 100 : 0;
+                
+                // Lain-lain
+                $lainTarget = 0;
+                $lainRealisasi = 0;
+                if ($lainLainKode) {
+                    $lainTarget = $lainLainKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
+                    $lainIds = KodeRekening::where('kode', 'like', $lainLainKode->kode . '%')
+                        ->where('level', 6)
+                        ->pluck('id')
+                        ->toArray();
+                    $lainRealisasi = Penerimaan::where('tahun', $tahun)
+                        ->whereIn('kode_rekening_id', $lainIds)
+                        ->sum('jumlah');
+                }
+                $lainPersentase = $lainTarget > 0 ? ($lainRealisasi / $lainTarget) * 100 : 0;
+                
+                // Count SKPD and transactions
+                $skpdCount = Skpd::where('status', 'aktif')
+                    ->whereNotNull('kode_rekening_access')
+                    ->where('kode_rekening_access', '!=', '[]')
+                    ->count();
+                
+                $totalTransaksi = Penerimaan::where('tahun', $tahun)->count();
+                
                 return [
-                    'total' => [
-                        'realisasi' => $totalRealisasi,
-                        'target' => $totalTarget,
-                        'kurang' => $totalKurang,
-                        'persentase' => round($totalPersentase, 2)
-                    ],
-                    'pad' => [
-                        'realisasi' => $padRealisasi,
-                        'target' => $padTarget,
-                        'kurang' => $padKurang,
-                        'persentase' => round($padPersentase, 2)
-                    ],
-                    'transfer' => [
-                        'realisasi' => $transferRealisasi,
-                        'target' => $transferTarget,
-                        'kurang' => $transferKurang,
-                        'persentase' => round($transferPersentase, 2)
-                    ],
-                    'lain_lain' => [
-                        'realisasi' => $lainLainRealisasi,
-                        'target' => $lainLainTarget,
-                        'kurang' => $lainLainKurang,
-                        'persentase' => round($lainLainPersentase, 2)
-                    ],
+                    'total_penerimaan' => $totalRealisasi,
+                    'total_target' => $totalTarget,
+                    'bulan_ini' => $realisasiBulanIni,
+                    'bulan_ini_growth' => $growthBulanIni,
+                    'persentase_capaian' => round($persentaseCapaian, 2),
                     'update_terakhir' => $updateTerakhir,
-                    'tahun' => $tahun
+                    'tahun' => $tahun,
+                    'skpd_count' => $skpdCount,
+                    'total_transaksi' => $totalTransaksi,
+                    'categories' => [
+                        [
+                            'id' => 'total',
+                            'nama' => 'Total Pendapatan Daerah',
+                            'realisasi' => $totalRealisasi,
+                            'target' => $totalTarget,
+                            'persentase' => round($persentaseCapaian, 2)
+                        ],
+                        [
+                            'id' => 'pad',
+                            'nama' => 'Pendapatan Asli Daerah',
+                            'realisasi' => $padRealisasi,
+                            'target' => $padTarget,
+                            'persentase' => round($padPersentase, 2)
+                        ],
+                        [
+                            'id' => 'transfer',
+                            'nama' => 'Pendapatan Transfer',
+                            'realisasi' => $transferRealisasi,
+                            'target' => $transferTarget,
+                            'persentase' => round($transferPersentase, 2)
+                        ],
+                        [
+                            'id' => 'lain',
+                            'nama' => 'Lain-lain Pendapatan',
+                            'realisasi' => $lainRealisasi,
+                            'target' => $lainTarget,
+                            'persentase' => round($lainPersentase, 2)
+                        ]
+                    ]
                 ];
             });
             
@@ -183,7 +217,7 @@ class PublicDashboardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal memuat data summary',
-                'data' => $this->getEmptyCategoryBreakdown()
+                'data' => $this->getEmptySummary()
             ], 500);
         }
     }
@@ -563,192 +597,12 @@ class PublicDashboardController extends Controller
         }
     }
 
-    /**
-     * Get kode rekening tree for cascading dropdown
-     * Returns children based on parent_id
-     */
-    public function getKodeRekeningTree(Request $request)
-    {
-        try {
-            $parentId = $request->input('parent_id', null);
-            $cacheKey = "public_kode_tree_{$parentId}";
-            
-            $data = Cache::remember($cacheKey, $this->cacheTime, function () use ($parentId) {
-                $query = KodeRekening::where('is_active', true)
-                    ->orderBy('kode');
-                
-                if ($parentId) {
-                    $query->where('parent_id', $parentId);
-                } else {
-                    // Get Level 2 by default (4.1, 4.2, 4.3)
-                    $query->where('level', 2)
-                          ->where('kode', 'like', '4.%');
-                }
-                
-                return $query->select('id', 'kode', 'nama', 'level', 'parent_id')
-                             ->get();
-            });
-            
-            return response()->json([
-                'success' => true,
-                'data' => $data
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Get Kode Rekening Tree Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memuat data kode rekening',
-                'data' => []
-            ], 500);
-        }
-    }
-    
-    /**
-     * Get category trend data (reuse TrendAnalysisService)
-     * Support ANY LEVEL (2, 3, 4, 5, 6)
-     */
-    public function getCategoryTrend(Request $request, $id)
-    {
-        try {
-            $years = $request->input('years', 3);
-            $view = $request->input('view', 'yearly');
-            $month = $request->input('month', null);
-            
-            $kodeRekening = KodeRekening::findOrFail($id);
-            
-            // Determine parameters based on level
-            if ($kodeRekening->level < 6) {
-                // Level 1-5: Show aggregated or children
-                $level = $kodeRekening->level + 1;
-                $parentKode = $kodeRekening->id;
-                $specificId = null;
-            } else {
-                // Level 6: Show the item itself
-                $level = 6;
-                $parentKode = null;
-                $specificId = $kodeRekening->id;
-            }
-            
-            // Get data based on view type
-            if ($view === 'monthly') {
-                $currentYear = date('Y');
-                $data = $this->trendService->getMonthlyChartData(
-                    $level, 
-                    $parentKode, 
-                    $currentYear, 
-                    10, 
-                    $specificId,
-                    $month
-                );
-            } else {
-                $data = $this->trendService->getYearlyChartData(
-                    $level, 
-                    $parentKode, 
-                    $years, 
-                    10, 
-                    $specificId
-                );
-            }
-            
-            // Add category info
-            $data['categoryInfo'] = [
-                'id' => $kodeRekening->id,
-                'kode' => $kodeRekening->kode,
-                'nama' => $kodeRekening->nama,
-                'level' => $kodeRekening->level
-            ];
-            
-            return response()->json([
-                'success' => true,
-                'data' => $data
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Get Category Trend Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memuat data trend kategori'
-            ], 500);
-        }
-    }
-    
-    /**
-     * Search kode rekening for public
-     */
-    public function searchKodeRekening(Request $request)
-    {
-        try {
-            $query = $request->input('q', '');
-            
-            if (strlen($query) < 2) {
-                return response()->json([
-                    'success' => true,
-                    'data' => []
-                ]);
-            }
-            
-            $results = $this->trendService->searchKodeRekening($query, 20);
-            
-            return response()->json([
-                'success' => true,
-                'data' => $results
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Search Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal melakukan pencarian',
-                'data' => []
-            ], 500);
-        }
-    }
-
     // ==========================================
     // HELPER METHODS
     // ==========================================
 
     /**
-     * Get empty category breakdown structure
-     */
-    private function getEmptyCategoryBreakdown()
-    {
-        return [
-            'total' => [
-                'realisasi' => 0,
-                'target' => 0,
-                'kurang' => 0,
-                'persentase' => 0
-            ],
-            'pad' => [
-                'realisasi' => 0,
-                'target' => 0,
-                'kurang' => 0,
-                'persentase' => 0
-            ],
-            'transfer' => [
-                'realisasi' => 0,
-                'target' => 0,
-                'kurang' => 0,
-                'persentase' => 0
-            ],
-            'lain_lain' => [
-                'realisasi' => 0,
-                'target' => 0,
-                'kurang' => 0,
-                'persentase' => 0
-            ],
-            'update_terakhir' => '-',
-            'tahun' => date('Y')
-        ];
-    }
-
-    /**
-     * Get empty summary data (deprecated - use getEmptyCategoryBreakdown)
+     * Get empty summary data
      */
     private function getEmptySummary()
     {
