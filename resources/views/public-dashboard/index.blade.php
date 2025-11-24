@@ -279,6 +279,452 @@
 .table-skpd tbody tr:last-child td {
     border-bottom: none;
 }
+
+/* ============================================
+   MOBILE RESPONSIVE STYLES - SILAPAT DASHBOARD
+   Tambahkan CSS ini ke bagian <style> yang sudah ada
+   ============================================ */
+
+/* Tablet & Small Desktop (768px - 1024px) */
+@media (max-width: 1024px) {
+    body {
+        overflow: auto;
+    }
+    
+    .dashboard-container {
+        height: auto;
+        min-height: 100vh;
+    }
+    
+    .dashboard-header {
+        height: auto;
+        min-height: 75px;
+    }
+    
+    .dashboard-header .px-5 {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .logo-silapat {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 1rem;
+    }
+    
+    .dashboard-header p {
+        font-size: 0.75rem;
+    }
+    
+    .dashboard-content {
+        overflow-y: visible;
+        height: auto;
+        padding: 1rem;
+    }
+    
+    .top-row {
+        grid-template-columns: 1fr;
+        flex: 0 0 auto;
+        gap: 1rem;
+    }
+    
+    .cards-small-container {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    
+    .table-container {
+        max-height: 500px;
+        overflow-x: auto;
+    }
+    
+    .chart-container {
+        height: 400px;
+    }
+}
+
+/* Mobile Landscape (481px - 767px) */
+@media (max-width: 767px) {
+    .dashboard-header {
+        height: auto;
+    }
+    
+    .dashboard-header .px-5 {
+        padding: 0.75rem;
+    }
+    
+    .dashboard-header .flex.items-center.gap-3 {
+        flex-direction: row;
+        gap: 0.75rem;
+    }
+    
+    .logo-silapat {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 0.875rem;
+        line-height: 1.2;
+    }
+    
+    .dashboard-header p {
+        font-size: 0.7rem;
+    }
+    
+    /* Year filter & Login button */
+    .dashboard-header .flex.items-center.gap-2\.5 {
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+    }
+    
+    .dashboard-header .flex.items-center.gap-2\.5 > div:first-child {
+        width: 100%;
+    }
+    
+    .dashboard-header select {
+        width: 100%;
+    }
+    
+    .dashboard-header .flex.items-center.gap-2\.5 > button,
+    .dashboard-header .flex.items-center.gap-2\.5 > a {
+        margin-top: 0 !important;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    /* Info Banner */
+    .info-banner-section {
+        height: auto;
+        min-height: 42px;
+    }
+    
+    .info-banner-section .flex-1 {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start !important;
+    }
+    
+    .info-banner-section .flex.items-center.gap-4 {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.25rem;
+        width: 100%;
+    }
+    
+    /* Dashboard Content */
+    .dashboard-content {
+        padding: 0.75rem;
+        gap: 0.75rem;
+    }
+    
+    /* Cards */
+    .card-big {
+        padding: 1rem;
+    }
+    
+    .card-big h2 {
+        font-size: 1.5rem;
+    }
+    
+    .card-big p {
+        font-size: 0.75rem;
+    }
+    
+    .cards-small-container {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .cards-small-container > div {
+        padding: 0.75rem;
+    }
+    
+    .cards-small-container h3 {
+        font-size: 1.125rem;
+    }
+    
+    /* Table SKPD */
+    .table-container {
+        max-height: 400px;
+    }
+    
+    .table-skpd {
+        font-size: 0.75rem;
+    }
+    
+    .table-skpd th,
+    .table-skpd td {
+        padding: 0.5rem;
+        font-size: 0.7rem;
+    }
+    
+    .table-skpd thead th > div > div:first-child {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.25rem;
+    }
+    
+    .table-skpd thead th > div > div:last-child > div {
+        width: auto !important;
+        min-width: 80px;
+        font-size: 0.7rem;
+    }
+    
+    .table-skpd td:nth-child(2),
+    .table-skpd td:nth-child(3) {
+        width: auto !important;
+        font-size: 0.7rem;
+    }
+    
+    .table-skpd td:nth-child(4) {
+        width: 60px !important;
+    }
+    
+    /* Chart */
+    .chart-container {
+        height: 350px;
+        padding: 0.75rem;
+    }
+    
+    .chart-container h3 {
+        font-size: 0.875rem;
+    }
+    
+    .chart-container .flex.items-center.justify-between {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Footer */
+    .dashboard-footer {
+        height: auto;
+        padding: 0.75rem 1rem;
+        text-align: center;
+    }
+    
+    .dashboard-footer p {
+        font-size: 0.65rem;
+        line-height: 1.4;
+    }
+    
+    .dashboard-footer .mx-2 {
+        display: block;
+        margin: 0.25rem 0;
+    }
+}
+
+/* Mobile Portrait (320px - 480px) */
+@media (max-width: 480px) {
+    .logo-silapat {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 0.75rem;
+    }
+    
+    .dashboard-header p {
+        font-size: 0.65rem;
+    }
+    
+    /* Info Banner - Stack Vertically */
+    .info-banner-section .px-4 {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    
+    .info-banner-section .text-sm {
+        font-size: 0.7rem;
+    }
+    
+    /* Big Card */
+    .card-big h2 {
+        font-size: 1.25rem;
+    }
+    
+    .card-big .text-lg {
+        font-size: 0.875rem;
+    }
+    
+    .card-big .text-base {
+        font-size: 0.75rem;
+    }
+    
+    /* Small Cards */
+    .cards-small-container .text-lg {
+        font-size: 0.875rem;
+    }
+    
+    .cards-small-container h3 {
+        font-size: 1rem;
+    }
+    
+    .cards-small-container .text-xs {
+        font-size: 0.65rem;
+    }
+    
+    /* Table - Horizontal Scroll */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .table-skpd {
+        min-width: 600px;
+    }
+    
+    .table-skpd th,
+    .table-skpd td {
+        padding: 0.4rem;
+        font-size: 0.65rem;
+        white-space: nowrap;
+    }
+    
+    .table-skpd thead th > div > div:first-child h3 {
+        font-size: 0.875rem;
+    }
+    
+    /* Chart */
+    .chart-container {
+        height: 300px;
+        padding: 0.5rem;
+    }
+    
+    .chart-container h3 {
+        font-size: 0.75rem;
+    }
+    
+    /* Footer */
+    .dashboard-footer p {
+        font-size: 0.6rem;
+    }
+}
+
+/* Extra Small Mobile (< 375px) */
+@media (max-width: 374px) {
+    .dashboard-content {
+        padding: 0.5rem;
+    }
+    
+    .card-big,
+    .cards-small-container > div {
+        padding: 0.65rem;
+    }
+    
+    .card-big h2 {
+        font-size: 1.125rem;
+    }
+    
+    .chart-container {
+        height: 280px;
+    }
+    
+    .table-skpd {
+        min-width: 550px;
+    }
+}
+
+/* Landscape Orientation untuk Mobile */
+@media (max-height: 600px) and (orientation: landscape) {
+    .dashboard-header {
+        height: auto;
+    }
+    
+    .logo-silapat {
+        width: 35px;
+        height: 35px;
+    }
+    
+    .info-banner-section {
+        display: none;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+    
+    .table-container {
+        max-height: 300px;
+    }
+}
+
+/* Utility Classes untuk Mobile */
+@media (max-width: 767px) {
+    .mobile-hidden {
+        display: none !important;
+    }
+    
+    .mobile-full-width {
+        width: 100% !important;
+    }
+    
+    .mobile-text-center {
+        text-align: center !important;
+    }
+    
+    .mobile-flex-col {
+        flex-direction: column !important;
+    }
+}
+
+/* Touch-friendly Elements */
+@media (hover: none) and (pointer: coarse) {
+    button,
+    a,
+    select {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .table-skpd tbody tr {
+        cursor: pointer;
+    }
+    
+    .table-skpd tbody tr:active {
+        background: #f3f4f6;
+    }
+}
+
+/* Prevent Text Selection on Mobile for Better UX */
+@media (max-width: 767px) {
+    .card-big,
+    .cards-small-container > div {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+}
+
+/* Optimize Scrolling Performance */
+.table-container {
+    -webkit-overflow-scrolling: touch;
+    transform: translateZ(0);
+    will-change: scroll-position;
+}
+
+/* Fix untuk ApexCharts di Mobile */
+@media (max-width: 767px) {
+    #monthlyChart {
+        min-height: 250px;
+    }
+    
+    .apexcharts-canvas {
+        margin: 0 auto;
+    }
+    
+    .apexcharts-legend {
+        justify-content: center !important;
+    }
+}
   </style>
 </head>
 <body class="bg-gray-50">
