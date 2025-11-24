@@ -265,6 +265,20 @@
     padding-left: 0 !important;
     padding-right: 0 !important;
 }
+
+.table-skpd thead th {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+.table-skpd tbody td {
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.table-skpd tbody tr:last-child td {
+    border-bottom: none;
+}
   </style>
 </head>
 <body class="bg-gray-50">
@@ -336,10 +350,10 @@
             <span class="text-gray-600">Total Transaksi:</span>
             <span class="font-semibold text-cyan-900 ml-1" x-text="totalTransaksi"></span>
         </div>
-        <div>
+        <!-- <div>
             <span class="text-gray-600">SKPD:</span>
             <span class="font-semibold text-cyan-900 ml-1" x-text="skpdInput"></span>
-        </div>
+        </div> -->
         <div>
             <span class="text-gray-600">Capaian:</span>
             <span class="font-semibold text-cyan-900 ml-1" x-text="capaianTotal"></span>
@@ -398,16 +412,18 @@
                                 </div>
                             </div>
                             
-                            <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.pad?.realisasi || 0)"></h3>
                             
-                            <div class="progress-bar mb-1.5">
-                                <div class="progress-fill" :style="`width: ${summary.pad?.persentase || 0}%`"></div>
-                            </div>
-                            
-                            <p class="text-sm (14px) text-white/80">
-                                <span class="font-semibold" x-text="formatPercentage(summary.pad?.persentase || 0)"></span> dari target
-                            </p>
-                        </div>
+    <div class="mb-1.5">
+        <h3 class="text-base font-bold mb-0.5" x-text="formatRupiahID(summary.pad?.realisasi || 0)"></h3>
+        <p class="text-xs text-white/80">
+            <span class="font-semibold" x-text="formatPercentage(summary.pad?.persentase || 0)"></span> dari target <span class="text-xs" x-text="formatRupiahID(summary.pad?.target || 0)"></span>
+        </p>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" :style="`width: ${summary.pad?.persentase || 0}%`"></div>
+    </div>
+</div>
                         
                         <!-- Card Transfer -->
                         <div class="gradient-cyan text-white rounded-lg p-3 shadow">
@@ -420,16 +436,17 @@
                                 </div>
                             </div>
                             
-                            <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.transfer?.realisasi || 0)"></h3>
-                            
-                            <div class="progress-bar mb-1.5">
-                                <div class="progress-fill" :style="`width: ${summary.transfer?.persentase || 0}%`"></div>
-                            </div>
-                            
-                            <p class="text-sm (14px) text-white/80">
-                                <span class="font-semibold" x-text="formatPercentage(summary.transfer?.persentase || 0)"></span> dari target
-                            </p>
-                        </div>
+                           <div class="mb-1.5">
+        <h3 class="text-base font-bold mb-0.5" x-text="formatRupiahID(summary.transfer?.realisasi || 0)"></h3>
+        <p class="text-xs text-white/80">
+            <span class="font-semibold" x-text="formatPercentage(summary.transfer?.persentase || 0)"></span> dari target <span class="text-xs" x-text="formatRupiahID(summary.transfer?.target || 0)"></span>
+        </p>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" :style="`width: ${summary.transfer?.persentase || 0}%`"></div>
+    </div>
+</div>
                         
                         <!-- Card Lain-lain -->
                         <div class="gradient-orange text-white rounded-lg p-3 shadow">
@@ -442,87 +459,115 @@
                                 </div>
                             </div>
                             
-                           <h3 class="text-base font-bold mb-1.5" x-text="formatRupiahID(summary.lain?.realisasi || 0)"></h3>
-                            
-                            <div class="progress-bar mb-1.5">
-                                <div class="progress-fill" :style="`width: ${summary.lain?.persentase || 0}%`"></div>
-                            </div>
-                            
-                            <p class="text-sm (14px) text-white/80">
-                                <span class="font-semibold" x-text="formatPercentage(summary.lain?.persentase || 0)"></span> dari target
-                            </p>
-                        </div>
-                        
+                           <div class="mb-1.5">
+        <h3 class="text-base font-bold mb-0.5" x-text="formatRupiahID(summary.lain?.realisasi || 0)"></h3>
+        <p class="text-xs text-white/80">
+            <span class="font-semibold" x-text="formatPercentage(summary.lain?.persentase || 0)"></span> dari target <span class="text-xs" x-text="formatRupiahID(summary.lain?.target || 0)"></span>
+        </p>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" :style="`width: ${summary.lain?.persentase || 0}%`"></div>
+    </div>
+</div>
                     </div>
                 </div>
                 
                 <!-- RIGHT COLUMN: Table SKPD -->
                 <div class="right-column">
                     <div class="table-container" x-ref="tableContainer">
-                        <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
-                            <div class="flex items-center justify-between">
-                                <h3 class="text-lg font-semibold text-gray-800">Realisasi Penerimaan per SKPD</h3>
-                                <span class="text-xs text-gray-600">Total: <span class="font-semibold" x-text="skpdData.length"></span> SKPD</span>
-                            </div>
-                        </div>
                         
-                        <table class="table-skpd">
-                            <thead>
-                                <tr>
-                                    <!-- <th class="w-8">NO</th> -->
-                                    <th>NAMA SKPD</th>
-                                    <th class="text-right w-48">REALISASI</th>
-                                    <th class="text-center w-16">%</th>
-                                    <!-- <th class="text-center w-20">STATUS</th> -->
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="(skpd, index) in skpdData" :key="index">
-                                    <tr>
-                                        <!-- <td class="text-gray-500 text-center" x-text="index + 1"></td> -->
-                                        <td class="font-medium text-gray-900" x-text="skpd.nama"></td>
-                                        <td class="text-right font-semibold text-gray-900" x-text="formatRupiahID(skpd.realisasi)"></td>
-                                        <td class="text-center">
-                                            <span 
-                                               class="px-2 py-1 rounded-full text-xs font-semibold inline-block"
-                                                :class="skpd.persentase >= 85 ? 'bg-green-100 text-green-800' : skpd.persentase >= 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'"
-                                                x-text="formatPercentage(skpd.persentase)"
-                                            ></span>
-                                        </td>
-                                        <!-- <td class="text-center">
-                                            <span 
-                                                class="px-2 py-0.5 rounded-full text-[10px] font-semibold inline-block"
-                                                :class="skpd.persentase >= 85 ? 'bg-yellow-400 text-white' : 'bg-red-500 text-white'"
-                                                x-text="skpd.persentase >= 85 ? 'PROSES' : 'RENDAH'"
-                                            ></span>
-                                        </td> -->
-                                    </tr>
-                                </template>
-                                
-                                <!-- Loading State -->
-                                <template x-if="loading && skpdData.length === 0">
-                                    <tr>
-                                        <td colspan="5" class="text-center py-8 text-gray-500">
-                                            <div class="flex items-center justify-center gap-2">
-                                                <svg class="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
-                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
-                                                <span class="text-sm">Memuat data...</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </template>
-                                
-                                <!-- Empty State -->
-                                <template x-if="!loading && skpdData.length === 0">
-                                    <tr>
-                                        <td colspan="5" class="text-center py-8 text-gray-500 text-sm">
-                                            Tidak ada data SKPD
-                                        </td>
-                                    </tr>
-                                </template>
-                            </tbody>
+  <table class="table-skpd">
+    <thead>
+        <tr>
+            <th colspan="4" class="p-0 border-0">
+                <div class="sticky top-0 z-20 bg-gray-50">
+                    <!-- Header Judul -->
+                    <div class="px-4 py-2.5">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-semibold text-gray-800">Realisasi Pendapatan per SKPD</h3>
+                            <span class="text-xs text-gray-600">Total: <span class="font-semibold" x-text="skpdData.length"></span> SKPD</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Header Kolom -->
+                    <div class="flex items-center border-t border-gray-200">
+                        <div class="flex-1 px-4 py-3 text-left font-semibold text-gray-700 text-sm">NAMA SKPD</div>
+                        <div style="width: 220px;" class="px-4 py-3 text-right font-semibold text-gray-700 text-sm">TARGET</div>
+                        <div style="width: 220px;" class="px-4 py-3 text-right font-semibold text-gray-700 text-sm">REALISASI</div>
+                        <div style="width: 80px;" class="px-4 py-3 text-center font-semibold text-gray-700 text-sm">%</div>
+                    </div>
+                </div>
+            </th>
+        </tr>
+    </thead>
+    
+    <tbody>
+        <template x-for="(skpd, index) in skpdData" :key="index">
+            <tr>
+                <td class="font-medium text-gray-900" x-text="skpd.nama"></td>
+                <td class="text-right font-semibold text-gray-900" style="width: 220px; white-space: nowrap;" x-text="formatRupiahID(skpd.target || 0)"></td>
+                <td class="text-right font-semibold text-gray-900" style="width: 220px; white-space: nowrap;" x-text="formatRupiahID(skpd.realisasi)"></td>
+                <td class="text-center" style="width: 80px;">
+                    <span 
+                        class="px-2 py-1 rounded-full text-xs font-semibold inline-block"
+                        :class="skpd.persentase >= 85 ? 'bg-green-100 text-green-800' : skpd.persentase >= 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'"
+                        x-text="formatPercentage(skpd.persentase)"
+                    ></span>
+                </td>
+            </tr>
+        </template>
+        
+        <!-- Loading State -->
+        <template x-if="loading && skpdData.length === 0">
+            <tr>
+                <td colspan="4" class="text-center py-8 text-gray-500">
+                    <div class="flex items-center justify-center gap-2">
+                        <svg class="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-sm">Memuat data...</span>
+                    </div>
+                </td>
+            </tr>
+        </template>
+        
+        <!-- Empty State -->
+        <template x-if="!loading && skpdData.length === 0">
+            <tr>
+                <td colspan="4" class="text-center py-8 text-gray-500 text-sm">
+                    Tidak ada data SKPD
+                </td>
+            </tr>
+        </template>
+    </tbody>
+</table>
+    
+    <!-- Loading State -->
+    <template x-if="loading && skpdData.length === 0">
+        <tr>
+            <td colspan="4" class="text-center py-8 text-gray-500">  <!-- colspan 3 → 4 -->
+                <div class="flex items-center justify-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm">Memuat data...</span>
+                </div>
+            </td>
+        </tr>
+    </template>
+    
+    <!-- Empty State -->
+    <template x-if="!loading && skpdData.length === 0">
+        <tr>
+            <td colspan="4" class="text-center py-8 text-gray-500 text-sm">  <!-- colspan 3 → 4 -->
+                Tidak ada data SKPD
+            </td>
+        </tr>
+    </template>
+</tbody>
                         </table>
                     </div>
                 </div>
@@ -533,7 +578,7 @@
             <div class="bottom-row">
                 <div class="chart-container">
                     <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-lg font-semibold text-gray-800">Tren Penerimaan Bulanan</h3>
+                        <h3 class="text-lg font-semibold text-gray-800">Tren Pendapatan Daerah Bulanan</h3>
                         <span class="text-sm font-semibold text-gray-600">Tahun <span x-text="selectedYear"></span></span>
                     </div>
                     <div id="monthlyChart" class="flex-1"></div>
