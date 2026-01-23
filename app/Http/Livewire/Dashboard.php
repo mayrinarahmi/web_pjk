@@ -59,6 +59,14 @@ class Dashboard extends Component
         'categories' => [],
         'series' => []
     ];
+
+
+// TAMBAHAN: Data untuk chart breakdown PAD
+public $chartDataPadBreakdown = [
+    'categories' => [],
+    'series' => []
+];
+
     
     public $kategoris = [];
     
@@ -146,6 +154,8 @@ class Dashboard extends Component
         $this->selectedTahunAnggaran = $value;
         $this->loadDashboardData();
         $this->dispatch('refreshChart', ['chartData' => $this->chartData]);
+
+        $this->dispatch('refreshChartPadBreakdown', ['chartData' => $this->chartDataPadBreakdown]);
     }
 
     public function loadDashboardData()
@@ -171,6 +181,9 @@ class Dashboard extends Component
             // Load data untuk chart
             $this->loadChartData();
             
+             // TAMBAHAN: Load data untuk chart breakdown PAD
+        $this->loadChartDataPadBreakdown();
+
             // Load data untuk tabel kategori
             $this->loadKategoriData();
             
@@ -207,6 +220,7 @@ class Dashboard extends Component
         $this->transfer = $defaultData;
         $this->lainLain = $defaultData;
         $this->chartData = ['categories' => [], 'series' => []];
+        $this->chartDataPadBreakdown = ['categories' => [], 'series' => []];
         $this->kategoris = [];
         
         // Reset tanggal terakhir
@@ -569,6 +583,130 @@ class Dashboard extends Component
             ]
         ];
     }
+
+    private function loadChartDataPadBreakdown()
+{
+    $tahunAnggaran = TahunAnggaran::find($this->selectedTahunAnggaran);
+    
+    if (!$tahunAnggaran) {
+        $this->chartDataPadBreakdown = [
+            'categories' => [],
+            'series' => []
+        ];
+        return;
+    }
+    
+    $selectedYear = $tahunAnggaran->tahun;
+    
+    // Data untuk 12 bulan
+    $months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    
+    // Array untuk menyimpan data setiap sub-kategori PAD
+    $pajakDaerahData = [];
+    $retribusiDaerahData = [];
+    $hasilPengelolaanData = [];
+    $lainPadData = [];
+    
+    for ($i = 1; $i <= 12; $i++) {
+        // 4.1.01 - Pajak Daerah
+        $pajakKode = KodeRekening::where('kode', '4.1.01')->first();
+        if ($pajakKode) {
+            $pajakIds = $this->getAllChildIds($pajakKode->id);
+            $pajakIds[] = $pajakKode->id;
+            
+            $query = Penerimaan::whereIn('kode_rekening_id', $pajakIds)
+                ->where('tahun', $selectedYear)
+                ->whereMonth('tanggal', $i);
+                
+            if (method_exists($query->getModel(), 'scopeFilterBySkpd')) {
+                $query = $query->filterBySkpd();
+            }
+            
+            $pajakDaerahData[] = (int) $query->sum('jumlah');
+        } else {
+            $pajakDaerahData[] = 0;
+        }
+        
+        // 4.1.02 - Retribusi Daerah
+        $retribusiKode = KodeRekening::where('kode', '4.1.02')->first();
+        if ($retribusiKode) {
+            $retribusiIds = $this->getAllChildIds($retribusiKode->id);
+            $retribusiIds[] = $retribusiKode->id;
+            
+            $query = Penerimaan::whereIn('kode_rekening_id', $retribusiIds)
+                ->where('tahun', $selectedYear)
+                ->whereMonth('tanggal', $i);
+                
+            if (method_exists($query->getModel(), 'scopeFilterBySkpd')) {
+                $query = $query->filterBySkpd();
+            }
+            
+            $retribusiDaerahData[] = (int) $query->sum('jumlah');
+        } else {
+            $retribusiDaerahData[] = 0;
+        }
+        
+        // 4.1.03 - Hasil Pengelolaan Kekayaan Daerah yang Dipisahkan
+        $hasilKode = KodeRekening::where('kode', '4.1.03')->first();
+        if ($hasilKode) {
+            $hasilIds = $this->getAllChildIds($hasilKode->id);
+            $hasilIds[] = $hasilKode->id;
+            
+            $query = Penerimaan::whereIn('kode_rekening_id', $hasilIds)
+                ->where('tahun', $selectedYear)
+                ->whereMonth('tanggal', $i);
+                
+            if (method_exists($query->getModel(), 'scopeFilterBySkpd')) {
+                $query = $query->filterBySkpd();
+            }
+            
+            $hasilPengelolaanData[] = (int) $query->sum('jumlah');
+        } else {
+            $hasilPengelolaanData[] = 0;
+        }
+        
+        // 4.1.04 - Lain-lain PAD yang Sah
+        $lainKode = KodeRekening::where('kode', '4.1.04')->first();
+        if ($lainKode) {
+            $lainIds = $this->getAllChildIds($lainKode->id);
+            $lainIds[] = $lainKode->id;
+            
+            $query = Penerimaan::whereIn('kode_rekening_id', $lainIds)
+                ->where('tahun', $selectedYear)
+                ->whereMonth('tanggal', $i);
+                
+            if (method_exists($query->getModel(), 'scopeFilterBySkpd')) {
+                $query = $query->filterBySkpd();
+            }
+            
+            $lainPadData[] = (int) $query->sum('jumlah');
+        } else {
+            $lainPadData[] = 0;
+        }
+    }
+    
+    $this->chartDataPadBreakdown = [
+        'categories' => $months,
+        'series' => [
+            [
+                'name' => 'Pajak Daerah',
+                'data' => $pajakDaerahData
+            ],
+            [
+                'name' => 'Retribusi Daerah',
+                'data' => $retribusiDaerahData
+            ],
+            [
+                'name' => 'Hasil Pengelolaan Kekayaan Daerah',
+                'data' => $hasilPengelolaanData
+            ],
+            [
+                'name' => 'Lain-lain PAD yang Sah',
+                'data' => $lainPadData
+            ]
+        ]
+    ];
+}
 
     private function loadKategoriData()
     {

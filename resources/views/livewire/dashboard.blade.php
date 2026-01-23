@@ -252,13 +252,30 @@
             </div>
         </div>
 
-        <!-- Chart Section -->
-        <div class="card mb-4 border-0 shadow-sm">
-            <div class="card-body">
-                <h5 class="card-title mb-4">Tren Penerimaan Bulanan</h5>
-                <div id="chart" style="height: 350px;" wire:ignore></div>
+       <!-- Chart Section -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title mb-4">Tren Penerimaan Bulanan</h5>
+        <div id="chart" style="height: 350px;" wire:ignore></div>
+    </div>
+</div>
+
+<!-- TAMBAHAN: Chart Breakdown PAD -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h5 class="card-title mb-1">Breakdown Pendapatan Asli Daerah (PAD)</h5>
+                <p class="text-muted small mb-0">Rincian per Kategori PAD</p>
+            </div>
+            <div class="badge bg-success bg-opacity-10 text-success">
+                Level 3 - Detail PAD
             </div>
         </div>
+        <div id="chartPadBreakdown" style="height: 380px;" wire:ignore></div>
+    </div>
+</div>
+
 
         <!-- Table Section - TANPA KOLOM PAGU -->
         <div class="card border-0 shadow-sm mb-4">
@@ -531,124 +548,255 @@
     </style>
 
     <!-- Scripts -->
-    @push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script>
-        let dashboardChart = null;
+   @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    let dashboardChart = null;
+    let padBreakdownChart = null; // TAMBAHAN: Variable untuk chart breakdown PAD
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // Initial chart render dengan data dari server
-            initChart(@json($chartData));
-        });
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initial chart render dengan data dari server
+        initChart(@json($chartData));
+        
+        // TAMBAHAN: Initial chart PAD breakdown
+        initChartPadBreakdown(@json($chartDataPadBreakdown));
+    });
 
-        // Listen for Livewire updates (Livewire v3)
-        document.addEventListener('livewire:initialized', () => {
-            // Listen untuk event refreshChart dengan data
-            Livewire.on('refreshChart', (event) => {
-                // Extract data dari event (Livewire v3 format)
-                const chartData = event.chartData || event[0]?.chartData || event;
-                
-                if (chartData && chartData.categories && chartData.series) {
-                    initChart(chartData);
-                }
-            });
+    // Listen for Livewire updates (Livewire v3)
+    document.addEventListener('livewire:initialized', () => {
+        // Listen untuk event refreshChart dengan data
+        Livewire.on('refreshChart', (event) => {
+            // Extract data dari event (Livewire v3 format)
+            const chartData = event.chartData || event[0]?.chartData || event;
             
-            // Listen untuk data refreshed event
-            Livewire.on('dataRefreshed', () => {
-                // Bisa tambahkan animasi atau notifikasi di sini
-                console.log('Dashboard data refreshed');
-            });
+            if (chartData && chartData.categories && chartData.series) {
+                initChart(chartData);
+            }
         });
-
-        function initChart(chartData) {
-            // Validasi data
-            if (!chartData || !chartData.categories || !chartData.series) {
-                console.error('Invalid chart data:', chartData);
-                return;
+        
+        // TAMBAHAN: Listen untuk event refreshChartPadBreakdown
+        Livewire.on('refreshChartPadBreakdown', (event) => {
+            const chartData = event.chartData || event[0]?.chartData || event;
+            
+            if (chartData && chartData.categories && chartData.series) {
+                initChartPadBreakdown(chartData);
             }
+        });
+        
+        // Listen untuk data refreshed event
+        Livewire.on('dataRefreshed', () => {
+            console.log('Dashboard data refreshed');
+        });
+    });
 
-            // Destroy existing chart if any
-            if (dashboardChart) {
-                dashboardChart.destroy();
-                dashboardChart = null;
-            }
+    function initChart(chartData) {
+        // Validasi data
+        if (!chartData || !chartData.categories || !chartData.series) {
+            console.error('Invalid chart data:', chartData);
+            return;
+        }
 
-            var options = {
-                series: chartData.series,
-                chart: {
-                    type: 'bar',
-                    height: 350,
-                    toolbar: {
-                        show: true,
-                        tools: {
-                            download: true,
-                            selection: false,
-                            zoom: false,
-                            zoomin: false,
-                            zoomout: false,
-                            pan: false,
-                            reset: false
-                        }
-                    }
-                },
-                plotOptions: {
-                    bar: {
-                        horizontal: false,
-                        columnWidth: '65%',
-                        endingShape: 'rounded',
-                        dataLabels: {
-                            position: 'top'
-                        }
-                    },
-                },
-                dataLabels: {
-                    enabled: false
-                },
-                stroke: {
+        // Destroy existing chart if any
+        if (dashboardChart) {
+            dashboardChart.destroy();
+            dashboardChart = null;
+        }
+
+        var options = {
+            series: chartData.series,
+            chart: {
+                type: 'bar',
+                height: 350,
+                toolbar: {
                     show: true,
-                    width: 2,
-                    colors: ['transparent']
-                },
-                xaxis: {
-                    categories: chartData.categories,
-                },
-                yaxis: {
-                    title: {
-                        text: 'Rupiah (Rp)'
-                    },
-                    labels: {
-                        formatter: function (val) {
-                            if (val >= 1000000000) {
-                                return "Rp " + (val / 1000000000).toFixed(1) + " M";
-                            } else if (val >= 1000000) {
-                                return "Rp " + (val / 1000000).toFixed(0) + " Jt";
-                            } else {
-                                return "Rp " + new Intl.NumberFormat('id-ID').format(val);
-                            }
-                        }
+                    tools: {
+                        download: true,
+                        selection: false,
+                        zoom: false,
+                        zoomin: false,
+                        zoomout: false,
+                        pan: false,
+                        reset: false
+                    }
+                }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: false,
+                    columnWidth: '65%',
+                    endingShape: 'rounded',
+                    dataLabels: {
+                        position: 'top'
                     }
                 },
-                fill: {
-                    opacity: 1
+            },
+            dataLabels: {
+                enabled: false
+            },
+            stroke: {
+                show: true,
+                width: 2,
+                colors: ['transparent']
+            },
+            xaxis: {
+                categories: chartData.categories,
+            },
+            yaxis: {
+                title: {
+                    text: 'Rupiah (Rp)'
                 },
-                tooltip: {
-                    y: {
-                        formatter: function (val) {
+                labels: {
+                    formatter: function (val) {
+                        if (val >= 1000000000) {
+                            return "Rp " + (val / 1000000000).toFixed(1) + " M";
+                        } else if (val >= 1000000) {
+                            return "Rp " + (val / 1000000).toFixed(0) + " Jt";
+                        } else {
                             return "Rp " + new Intl.NumberFormat('id-ID').format(val);
                         }
                     }
-                },
-                colors: ['#28a745', '#17a2b8', '#ffc107'],
-                legend: {
-                    position: 'bottom',
-                    horizontalAlign: 'center'
                 }
-            };
+            },
+            fill: {
+                opacity: 1
+            },
+            tooltip: {
+                y: {
+                    formatter: function (val) {
+                        return "Rp " + new Intl.NumberFormat('id-ID').format(val);
+                    }
+                }
+            },
+            colors: ['#28a745', '#17a2b8', '#ffc107'],
+            legend: {
+                position: 'bottom',
+                horizontalAlign: 'center'
+            }
+        };
 
-            // Create new chart
-            dashboardChart = new ApexCharts(document.querySelector("#chart"), options);
-            dashboardChart.render();
+        // Create new chart
+        dashboardChart = new ApexCharts(document.querySelector("#chart"), options);
+        dashboardChart.render();
+    }
+
+    // TAMBAHAN: Function untuk initialize chart breakdown PAD
+    function initChartPadBreakdown(chartData) {
+        // Validasi data
+        if (!chartData || !chartData.categories || !chartData.series) {
+            console.error('Invalid PAD breakdown chart data:', chartData);
+            return;
         }
-    </script>
-    @endpush
+
+        // Destroy existing chart if any
+        if (padBreakdownChart) {
+            padBreakdownChart.destroy();
+            padBreakdownChart = null;
+        }
+
+        var options = {
+            series: chartData.series,
+            chart: {
+                type: 'area',
+                height: 380,
+                stacked: false,
+                toolbar: {
+                    show: true,
+                    tools: {
+                        download: true,
+                        selection: false,
+                        zoom: true,
+                        zoomin: true,
+                        zoomout: true,
+                        pan: true,
+                        reset: true
+                    }
+                },
+                zoom: {
+                    enabled: true,
+                    type: 'x'
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            stroke: {
+                curve: 'smooth',
+                width: 2
+            },
+            xaxis: {
+                categories: chartData.categories,
+                labels: {
+                    style: {
+                        fontSize: '12px'
+                    }
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'Rupiah (Rp)',
+                    style: {
+                        fontSize: '12px'
+                    }
+                },
+                labels: {
+                    formatter: function (val) {
+                        if (val >= 1000000000) {
+                            return "Rp " + (val / 1000000000).toFixed(1) + " M";
+                        } else if (val >= 1000000) {
+                            return "Rp " + (val / 1000000).toFixed(0) + " Jt";
+                        } else if (val >= 1000) {
+                            return "Rp " + (val / 1000).toFixed(0) + " Rb";
+                        } else {
+                            return "Rp " + new Intl.NumberFormat('id-ID').format(val);
+                        }
+                    },
+                    style: {
+                        fontSize: '11px'
+                    }
+                }
+            },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    opacityFrom: 0.6,
+                    opacityTo: 0.1,
+                    stops: [0, 90, 100]
+                }
+            },
+            tooltip: {
+                shared: true,
+                intersect: false,
+                y: {
+                    formatter: function (val) {
+                        return "Rp " + new Intl.NumberFormat('id-ID').format(val);
+                    }
+                }
+            },
+            colors: ['#007bff', '#6f42c1', '#fd7e14', '#20c997'],
+            legend: {
+                position: 'bottom',
+                horizontalAlign: 'center',
+                fontSize: '13px',
+                markers: {
+                    width: 12,
+                    height: 12,
+                    radius: 3
+                },
+                itemMargin: {
+                    horizontal: 10,
+                    vertical: 5
+                }
+            },
+            grid: {
+                borderColor: '#e7e7e7',
+                strokeDashArray: 3
+            }
+        };
+
+        // Create new chart
+        padBreakdownChart = new ApexCharts(document.querySelector("#chartPadBreakdown"), options);
+        padBreakdownChart.render();
+    }
+</script>
+@endpush
 </div>

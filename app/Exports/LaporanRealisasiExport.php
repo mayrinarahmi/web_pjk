@@ -6,6 +6,7 @@ use App\Models\KodeRekening;
 use App\Models\Penerimaan;
 use App\Models\TargetAnggaran;
 use App\Models\TahunAnggaran;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -42,14 +43,29 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
 
     protected function loadData()
     {
-        // Get tahun_anggaran_id
+        // Get tahun_anggaran_id - PRIORITAS: yang aktif, fallback ke perubahan, lalu murni
         $tahunAnggaran = TahunAnggaran::where('tahun', $this->tahun)
-            ->where('jenis_anggaran', 'murni')
+            ->where('is_active', 1)
             ->first();
-            
+
+        // Jika tidak ada yang aktif, ambil perubahan dulu, baru murni
+        if (!$tahunAnggaran) {
+            $tahunAnggaran = TahunAnggaran::where('tahun', $this->tahun)
+                ->orderByRaw("FIELD(jenis_anggaran, 'perubahan', 'murni')")
+                ->first();
+        }
+
         $tahunAnggaranId = $tahunAnggaran ? $tahunAnggaran->id : null;
         $tahunLalu = $this->tahun - 1;
-        
+
+        // Log untuk debugging
+        Log::info('Export LRA - Tahun Anggaran Selected', [
+            'tahun' => $this->tahun,
+            'tahun_anggaran_id' => $tahunAnggaranId,
+            'jenis_anggaran' => $tahunAnggaran ? $tahunAnggaran->jenis_anggaran : 'N/A',
+            'is_active' => $tahunAnggaran ? $tahunAnggaran->is_active : 'N/A'
+        ]);
+
         // Initialize summary
         $this->summaryData = [
             'pendapatan_daerah' => ['target' => 0, 'realisasi' => 0, 'realisasi_lalu' => 0],
@@ -75,7 +91,14 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                 CAST(IFNULL(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(kode, '.', 6), '.', -1), SUBSTRING_INDEX(kode, '.', 5)), '0') AS UNSIGNED)
             ")
             ->get();
-            
+
+        // Log summary
+        Log::info('Export LRA - Processing Kode Rekening', [
+            'total_kode' => $kodeRekenings->count(),
+            'allowed_kode_filter' => !empty($this->allowedKodeRekeningIds) ? count($this->allowedKodeRekeningIds) : 'NONE (Konsolidasi)',
+            'skpd_id_filter' => $this->skpdId ?? 'NONE (Konsolidasi)'
+        ]);
+
         foreach ($kodeRekenings as $kode) {
             $target = 0;
             $realisasi = 0;
@@ -87,6 +110,16 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                     $target = TargetAnggaran::where('kode_rekening_id', $kode->id)
                         ->where('tahun_anggaran_id', $tahunAnggaranId)
                         ->value('jumlah') ?? 0;
+
+                    // Debug logging untuk kode tertentu
+                    if (in_array($kode->kode, ['4.1.01.09.01.0001', '4.1.01.06.01.0001', '4'])) {
+                        Log::info("Export LRA - Level 6 Target", [
+                            'kode' => $kode->kode,
+                            'kode_rekening_id' => $kode->id,
+                            'tahun_anggaran_id' => $tahunAnggaranId,
+                            'target' => $target
+                        ]);
+                    }
                 }
                 
                 // Realisasi tahun ini
@@ -135,6 +168,16 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                         $target = TargetAnggaran::whereIn('kode_rekening_id', $childrenIds)
                             ->where('tahun_anggaran_id', $tahunAnggaranId)
                             ->sum('jumlah');
+
+                        // Debug logging untuk kode tertentu
+                        if (in_array($kode->kode, ['4', '4.1', '4.1.01', '4.1.01.09', '4.1.01.09.01'])) {
+                            Log::info("Export LRA - Level {$kode->level} Target (Aggregate)", [
+                                'kode' => $kode->kode,
+                                'children_count' => count($childrenIds),
+                                'tahun_anggaran_id' => $tahunAnggaranId,
+                                'target' => $target
+                            ]);
+                        }
                     }
                     
                     $query = Penerimaan::whereIn('kode_rekening_id', $childrenIds)
@@ -194,6 +237,16 @@ class LaporanRealisasiExport implements FromCollection, WithHeadings, WithMappin
                 'realisasi_lalu' => $realisasiLalu
             ];
         }
+
+        // Log final summary
+        $targetCount = count(array_filter($this->data, function($d) { return $d['target'] > 0; }));
+        $totalTarget = array_sum(array_column($this->data, 'target'));
+
+        Log::info('Export LRA - Final Data Summary', [
+            'total_rows' => count($this->data),
+            'rows_with_target' => $targetCount,
+            'total_target_amount' => $totalTarget
+        ]);
     }
 
     private function getLevel6Descendants($kode)
