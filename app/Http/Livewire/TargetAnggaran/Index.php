@@ -111,6 +111,16 @@ class Index extends Component
     }
     
     /**
+     * Get tahun (year) from current tahunAnggaranId
+     */
+    private function getTahunFromAnggaranId()
+    {
+        if (!$this->tahunAnggaranId) return null;
+        $ta = TahunAnggaran::find($this->tahunAnggaranId);
+        return $ta ? $ta->tahun : null;
+    }
+
+    /**
      * Load kode rekening Level 6 berdasarkan SKPD access
      */
     private function loadKodeRekeningLevel6()
@@ -118,6 +128,12 @@ class Index extends Component
         $user = auth()->user();
         $query = KodeRekening::where('level', 6)
                              ->where('is_active', true);
+
+        // Filter berdasarkan tahun berlaku
+        $tahun = $this->getTahunFromAnggaranId();
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
         
         if ($user->skpd_id && !$user->canViewAllSkpd()) {
             // Operator SKPD - filter by assigned kode rekening
@@ -376,7 +392,8 @@ class Index extends Component
         }
         
         try {
-            KodeRekening::updateHierarchiTargets($this->tahunAnggaranId);
+            $tahun = $this->getTahunFromAnggaranId();
+            KodeRekening::updateHierarchiTargets($this->tahunAnggaranId, $tahun);
             session()->flash('success', 'Hierarki target anggaran berhasil diperbarui!');
             $this->refreshData();
         } catch (\Exception $e) {
@@ -449,7 +466,13 @@ class Index extends Component
         
         // Build query
         $query = KodeRekening::where('is_active', true);
-        
+
+        // Filter berdasarkan tahun berlaku
+        $tahun = $this->getTahunFromAnggaranId();
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
+
         // Filter levels
         $visibleLevels = [];
         if ($this->showLevel1) $visibleLevels[] = 1;

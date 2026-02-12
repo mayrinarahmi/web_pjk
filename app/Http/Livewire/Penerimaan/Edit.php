@@ -144,7 +144,12 @@ class Edit extends Component
         $user = auth()->user();
         $query = KodeRekening::where('level', 6)
                              ->where('is_active', true);
-        
+
+        // Filter kode rekening berdasarkan tahun yang dipilih
+        if ($this->tahun) {
+            $query->forTahun($this->tahun);
+        }
+
         if ($user->isSuperAdmin()) {
             // Super Admin - filter by selected SKPD
             if ($this->selectedSkpdId) {
@@ -374,9 +379,16 @@ class Edit extends Component
     {
         if ($this->tanggal) {
             $tahunDariTanggal = Carbon::parse($this->tanggal)->year;
-            
+            $oldTahun = $this->tahun;
+
             if (in_array($tahunDariTanggal, $this->availableYears)) {
                 $this->tahun = $tahunDariTanggal;
+            }
+
+            // Reload kode rekening jika tahun berubah (generasi kode bisa berbeda)
+            if ($oldTahun != $this->tahun) {
+                $this->loadKodeRekening();
+                $this->kode_rekening_id = null;
             }
         }
     }
