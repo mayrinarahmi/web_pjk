@@ -43,10 +43,15 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 return null;
             }
             
-            // Cari kode rekening berdasarkan kode
-            $kodeRekening = KodeRekening::where('kode', $row['kode'])
-                ->where('is_active', true)
-                ->first();
+            // Cari kode rekening berdasarkan kode (filter by tahun berlaku)
+            $kodeQuery = KodeRekening::where('kode', $row['kode'])
+                ->where('is_active', true);
+
+            if ($this->tahun) {
+                $kodeQuery->forTahun($this->tahun);
+            }
+
+            $kodeRekening = $kodeQuery->first();
             
             if (!$kodeRekening) {
                 Log::warning("Kode rekening '{$row['kode']}' tidak ditemukan");

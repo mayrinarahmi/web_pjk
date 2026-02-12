@@ -16,10 +16,12 @@ class KodeRekening extends Model
         'parent_id',
         'level',
         'is_active',
+        'berlaku_mulai',
     ];
-    
+
     protected $casts = [
         'is_active' => 'boolean',
+        'berlaku_mulai' => 'integer',
     ];
     
     // ==========================================
@@ -153,21 +155,27 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
      * @param int $tahunAnggaranId
      * @return bool
      */
-    public static function updateHierarchiTargetsKonsolidasi($tahunAnggaranId)
+    public static function updateHierarchiTargetsKonsolidasi($tahunAnggaranId, $tahun = null)
     {
         DB::beginTransaction();
-        
+
         try {
             Log::info('Starting hierarki konsolidasi update', [
-                'tahun_anggaran_id' => $tahunAnggaranId
+                'tahun_anggaran_id' => $tahunAnggaranId,
+                'tahun' => $tahun
             ]);
-            
+
             // Update dari level 5 ke atas (bottom-up)
             // Level 6 sudah diinput manual per SKPD
             for ($level = 5; $level >= 1; $level--) {
-                $parents = self::where('level', $level)
-                    ->where('is_active', true)
-                    ->get();
+                $parentQuery = self::where('level', $level)
+                    ->where('is_active', true);
+
+                if ($tahun) {
+                    $parentQuery->forTahun($tahun);
+                }
+
+                $parents = $parentQuery->get();
                 
                 Log::info("Processing level {$level}", [
                     'count' => $parents->count()
@@ -175,11 +183,15 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
                 
                 foreach ($parents as $parent) {
                     // Get all Level 6 descendants
-                    $level6Ids = self::where('kode', 'like', $parent->kode . '%')
+                    $level6Query = self::where('kode', 'like', $parent->kode . '%')
                         ->where('level', 6)
-                        ->where('is_active', true)
-                        ->pluck('id')
-                        ->toArray();
+                        ->where('is_active', true);
+
+                    if ($tahun) {
+                        $level6Query->forTahun($tahun);
+                    }
+
+                    $level6Ids = $level6Query->pluck('id')->toArray();
                     
                     if (empty($level6Ids)) {
                         continue;
@@ -235,10 +247,10 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
      * BACKWARD COMPATIBILITY - Update hierarki (wrapper method)
      * Method lama masih bisa dipanggil, tapi akan redirect ke method baru
      */
-    public static function updateHierarchiTargets($tahunAnggaranId)
+    public static function updateHierarchiTargets($tahunAnggaranId, $tahun = null)
     {
         // Call the new konsolidasi method
-        return self::updateHierarchiTargetsKonsolidasi($tahunAnggaranId);
+        return self::updateHierarchiTargetsKonsolidasi($tahunAnggaranId, $tahun);
     }
     
     // ==========================================
@@ -390,64 +402,80 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
     /**
      * Method untuk mendapatkan data hierarkis dengan urutan yang benar
      */
-    public static function getHierarchicalList($visibleLevels = [1,2,3,4,5,6], $search = null)
+    public static function getHierarchicalList($visibleLevels = [1,2,3,4,5,6], $search = null, $tahun = null)
     {
         $query = self::where('is_active', true);
-        
+
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
+
         if (!empty($visibleLevels)) {
             $query->whereIn('level', $visibleLevels);
         }
-        
+
         if ($search) {
             $query->where(function($q) use ($search) {
                 $q->where('kode', 'like', '%' . $search . '%')
                   ->orWhere('nama', 'like', '%' . $search . '%');
             });
         }
-        
+
         return $query->simpleKodeOrder()->get();
     }
     
     /**
      * Alternative method for pagination dengan ordering yang benar
      */
-    public static function getHierarchicalQuery($visibleLevels = [1,2,3,4,5,6], $search = null)
+    public static function getHierarchicalQuery($visibleLevels = [1,2,3,4,5,6], $search = null, $tahun = null)
     {
         $query = self::where('is_active', true);
-        
+
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
+
         if (!empty($visibleLevels)) {
             $query->whereIn('level', $visibleLevels);
         }
-        
+
         if ($search) {
             $query->where(function($q) use ($search) {
                 $q->where('kode', 'like', '%' . $search . '%')
                   ->orWhere('nama', 'like', '%' . $search . '%');
             });
         }
-        
+
         return $query->correctHierarchicalOrder();
     }
     
     /**
      * Static method untuk mendapatkan kode rekening berdasarkan pattern
      */
-    public static function getByKodePattern($pattern)
+    public static function getByKodePattern($pattern, $tahun = null)
     {
-        return self::where('kode', 'like', $pattern . '%')
-                  ->simpleKodeOrder()
-                  ->get();
+        $query = self::where('kode', 'like', $pattern . '%');
+
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
+
+        return $query->simpleKodeOrder()->get();
     }
-    
+
     /**
      * Static method untuk mendapatkan kode rekening level 6 berdasarkan parent pattern
      */
-    public static function getLevel6ByParentPattern($pattern)
+    public static function getLevel6ByParentPattern($pattern, $tahun = null)
     {
-        return self::where('kode', 'like', $pattern . '%')
-                  ->where('level', 6)
-                  ->pluck('id')
-                  ->toArray();
+        $query = self::where('kode', 'like', $pattern . '%')
+                     ->where('level', 6);
+
+        if ($tahun) {
+            $query->forTahun($tahun);
+        }
+
+        return $query->pluck('id')->toArray();
     }
     
     // ==========================================
@@ -476,6 +504,27 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
     public function scopeKodePattern($query, $pattern)
     {
         return $query->where('kode', 'like', $pattern . '%');
+    }
+
+    /**
+     * Scope untuk filter kode rekening berdasarkan tahun berlaku.
+     * Mengambil generasi terbaru yang berlaku_mulai <= $tahun.
+     * Contoh: tahun 2025 → ambil berlaku_mulai=2022, tahun 2026 → ambil berlaku_mulai=2026
+     */
+    public function scopeForTahun($query, $tahun)
+    {
+        if (!$tahun) {
+            return $query;
+        }
+
+        $maxBerlaku = self::where('berlaku_mulai', '<=', $tahun)
+                          ->max('berlaku_mulai');
+
+        if ($maxBerlaku === null) {
+            return $query;
+        }
+
+        return $query->where('berlaku_mulai', $maxBerlaku);
     }
     
     // ==========================================

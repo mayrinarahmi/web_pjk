@@ -22,6 +22,7 @@ class Index extends Component
     public $selectedSkpdId = null;
     public $kodeRekeningTree = [];
     public $selectedKodeRekening = [];
+    public $assignTahunFilter = ''; // Filter berlaku_mulai pada assignment tree
     
     protected $paginationTheme = 'bootstrap';
     
@@ -88,13 +89,22 @@ class Index extends Component
         $this->kodeRekeningTree = [];
     }
     
+    public function updatedAssignTahunFilter()
+    {
+        $this->loadKodeRekeningTree();
+    }
+
     private function loadKodeRekeningTree()
     {
-        // Load kode rekening hierarchically
-        $level3 = KodeRekening::where('level', 3)
-                              ->where('is_active', true)
-                              ->orderBy('kode')
-                              ->get();
+        // Load kode rekening hierarchically (filter by berlaku_mulai jika dipilih)
+        $query = KodeRekening::where('level', 3)
+                              ->where('is_active', true);
+
+        if ($this->assignTahunFilter) {
+            $query->forTahun($this->assignTahunFilter);
+        }
+
+        $level3 = $query->orderBy('kode')->get();
         
         $tree = [];
         
@@ -108,11 +118,13 @@ class Index extends Component
             ];
             
             // Get Level 4 children
-            $level4 = KodeRekening::where('parent_id', $l3->id)
-                                  ->where('level', 4)
-                                  ->where('is_active', true)
-                                  ->orderBy('kode')
-                                  ->get();
+            $l4Query = KodeRekening::where('parent_id', $l3->id)
+                                   ->where('level', 4)
+                                   ->where('is_active', true);
+            if ($this->assignTahunFilter) {
+                $l4Query->forTahun($this->assignTahunFilter);
+            }
+            $level4 = $l4Query->orderBy('kode')->get();
             
             foreach ($level4 as $l4) {
                 $l4Node = [
@@ -124,11 +136,13 @@ class Index extends Component
                 ];
                 
                 // Get Level 5 children
-                $level5 = KodeRekening::where('parent_id', $l4->id)
-                                      ->where('level', 5)
-                                      ->where('is_active', true)
-                                      ->orderBy('kode')
-                                      ->get();
+                $l5Query = KodeRekening::where('parent_id', $l4->id)
+                                       ->where('level', 5)
+                                       ->where('is_active', true);
+                if ($this->assignTahunFilter) {
+                    $l5Query->forTahun($this->assignTahunFilter);
+                }
+                $level5 = $l5Query->orderBy('kode')->get();
                 
                 foreach ($level5 as $l5) {
                     $l5Node = [
@@ -140,10 +154,13 @@ class Index extends Component
                     ];
                     
                     // Get Level 6 count for display
-                    $level6Count = KodeRekening::where('parent_id', $l5->id)
-                                               ->where('level', 6)
-                                               ->where('is_active', true)
-                                               ->count();
+                    $l6Query = KodeRekening::where('parent_id', $l5->id)
+                                           ->where('level', 6)
+                                           ->where('is_active', true);
+                    if ($this->assignTahunFilter) {
+                        $l6Query->forTahun($this->assignTahunFilter);
+                    }
+                    $level6Count = $l6Query->count();
                     
                     $l5Node['level6_count'] = $level6Count;
                     $l4Node['children'][] = $l5Node;

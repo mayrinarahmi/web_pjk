@@ -58,6 +58,15 @@ class Create extends Component
     }
     
     /**
+     * Reload kode rekening saat tahun anggaran berubah
+     */
+    public function updatedTahunAnggaranId()
+    {
+        $this->loadKodeRekening();
+        $this->kodeRekeningId = null;
+    }
+
+    /**
      * Initialize SKPD context berdasarkan role user
      */
     private function initializeSkpdContext($user)
@@ -101,7 +110,15 @@ class Create extends Component
         $user = auth()->user();
         $query = KodeRekening::where('level', 6) // ✅ LEVEL 6
                              ->where('is_active', true);
-        
+
+        // Filter berdasarkan tahun berlaku
+        if ($this->tahunAnggaranId) {
+            $ta = TahunAnggaran::find($this->tahunAnggaranId);
+            if ($ta) {
+                $query->forTahun($ta->tahun);
+            }
+        }
+
         if ($user->canViewAllSkpd()) {
             // Super Admin/Kepala Badan - filter by selected SKPD
             if ($this->selectedSkpdId) {

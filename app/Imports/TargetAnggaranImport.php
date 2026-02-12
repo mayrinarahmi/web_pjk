@@ -28,7 +28,8 @@ class TargetAnggaranImport implements
     use SkipsErrors, SkipsFailures;
     
     protected $tahunAnggaranId;
-    protected $skpdId; // ✅ TAMBAHAN BARU
+    protected $skpdId;
+    protected $tahun;
     protected $processedCount = 0;
     protected $skippedCount = 0;
     protected $zeroValueCount = 0;
@@ -38,6 +39,10 @@ class TargetAnggaranImport implements
     {
         $this->tahunAnggaranId = $tahunAnggaranId;
         $this->skpdId = $skpdId;
+
+        // Resolve tahun from tahunAnggaranId for berlaku_mulai filtering
+        $ta = \App\Models\TahunAnggaran::find($tahunAnggaranId);
+        $this->tahun = $ta ? $ta->tahun : null;
     }
     
     public function model(array $row)
@@ -193,22 +198,32 @@ class TargetAnggaranImport implements
     
     private function findKodeRekening($kode)
     {
-        // Method 1: Exact match + Level 6 ✅
-        $kodeRekening = KodeRekening::where('kode', $kode)
+        // Method 1: Exact match + Level 6 + tahun filter ✅
+        $query = KodeRekening::where('kode', $kode)
             ->where('is_active', true)
-            ->where('level', 6) // ✅ HANYA LEVEL 6
-            ->first();
-            
+            ->where('level', 6);
+
+        if ($this->tahun) {
+            $query->forTahun($this->tahun);
+        }
+
+        $kodeRekening = $query->first();
+
         if ($kodeRekening) {
             return $kodeRekening;
         }
-        
-        // Method 2: Case insensitive + Level 6 ✅
-        $kodeRekening = KodeRekening::whereRaw('LOWER(kode) = LOWER(?)', [$kode])
+
+        // Method 2: Case insensitive + Level 6 + tahun filter ✅
+        $query2 = KodeRekening::whereRaw('LOWER(kode) = LOWER(?)', [$kode])
             ->where('is_active', true)
-            ->where('level', 6) // ✅ HANYA LEVEL 6
-            ->first();
-            
+            ->where('level', 6);
+
+        if ($this->tahun) {
+            $query2->forTahun($this->tahun);
+        }
+
+        $kodeRekening = $query2->first();
+
         if ($kodeRekening) {
             return $kodeRekening;
         }
