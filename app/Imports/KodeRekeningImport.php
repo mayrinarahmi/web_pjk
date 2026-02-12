@@ -15,16 +15,7 @@ class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
     protected $errors = [];
     protected $processedCount = 0;
     protected $skippedCount = 0;
-    protected $defaultBerlakuMulai;
-
-    /**
-     * @param int|null $berlakuMulai Default berlaku_mulai jika tidak ada di Excel
-     */
-    public function __construct($berlakuMulai = null)
-    {
-        $this->defaultBerlakuMulai = $berlakuMulai ?? 2022;
-    }
-
+    
     /**
      * Process the entire collection at once to handle parent-child relationships
      */
@@ -35,10 +26,7 @@ class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
             return [
                 'kode' => $this->cleanKode($row['kode'] ?? ''),
                 'nama' => $this->cleanNama($row['nama'] ?? ''),
-                'level' => $this->cleanLevel($row['level'] ?? ''),
-                'berlaku_mulai' => isset($row['berlaku_mulai']) && !empty($row['berlaku_mulai'])
-                    ? (int) $row['berlaku_mulai']
-                    : $this->defaultBerlakuMulai,
+                'level' => $this->cleanLevel($row['level'] ?? '')
             ];
         });
         
@@ -128,22 +116,21 @@ class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
         try {
             $kode = $row['kode'];
             $nama = $row['nama'];
-            $berlakuMulai = $row['berlaku_mulai'] ?? $this->defaultBerlakuMulai;
-
+            
             // Skip if empty
             if (empty($kode) || empty($nama)) {
                 $this->errors[] = "Data kosong ditemukan, dilewati";
                 $this->skippedCount++;
                 return;
             }
-
+            
             // Validate level
             if ($level < 1 || $level > 6) {
                 $this->errors[] = "Level tidak valid untuk kode {$kode}: {$level}";
                 $this->skippedCount++;
                 return;
             }
-
+            
             // Validate level matches kode format
             $expectedLevel = $this->calculateLevelFromKode($kode);
             if ($expectedLevel != $level) {
@@ -151,48 +138,42 @@ class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
                 $this->skippedCount++;
                 return;
             }
-
-            // Check if already exists (unique: kode + berlaku_mulai)
-            $existing = KodeRekening::where('kode', $kode)
-                ->where('berlaku_mulai', $berlakuMulai)
-                ->first();
+            
+            // Check if already exists
+            $existing = KodeRekening::where('kode', $kode)->first();
             if ($existing) {
                 // Update existing if needed
                 $existing->update([
                     'nama' => $nama,
                     'is_active' => true
                 ]);
-                Log::info("Kode {$kode} (berlaku_mulai: {$berlakuMulai}) sudah ada, diupdate");
+                Log::info("Kode {$kode} sudah ada, diupdate");
                 $this->skippedCount++;
                 return;
             }
-
+            
             // Find parent (for level > 1)
             $parentId = null;
             if ($level > 1) {
                 $parentKode = $this->getParentKode($kode);
-                // Cari parent dengan berlaku_mulai yang sama
-                $parent = KodeRekening::where('kode', $parentKode)
-                    ->where('berlaku_mulai', $berlakuMulai)
-                    ->first();
-
+                $parent = KodeRekening::where('kode', $parentKode)->first();
+                
                 if (!$parent) {
-                    $this->errors[] = "Parent kode tidak ditemukan untuk kode: {$kode} (berlaku_mulai: {$berlakuMulai}). Parent yang dicari: {$parentKode}";
+                    $this->errors[] = "Parent kode tidak ditemukan untuk kode: {$kode}. Parent yang dicari: {$parentKode}";
                     $this->skippedCount++;
                     return;
                 }
-
+                
                 $parentId = $parent->id;
             }
-
+            
             // Create kode rekening
             KodeRekening::create([
                 'kode' => $kode,
                 'nama' => $nama,
                 'level' => $level,
                 'parent_id' => $parentId,
-                'is_active' => true,
-                'berlaku_mulai' => $berlakuMulai,
+                'is_active' => true
             ]);
             
             $this->processedCount++;
@@ -236,7 +217,6 @@ class KodeRekeningImport implements ToCollection, WithHeadingRow, WithValidation
             '*.kode' => 'required',
             '*.nama' => 'required',
             '*.level' => 'required|numeric|min:1|max:6',
-            '*.berlaku_mulai' => 'nullable|numeric|min:2020|max:2099',
         ];
     }
     

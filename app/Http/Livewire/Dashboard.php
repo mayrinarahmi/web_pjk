@@ -337,7 +337,6 @@ public $chartDataPadBreakdown = [
     // ✅ Query langsung: ambil semua Level 6 yang kodenya dimulai dengan prefix ini
     $kodeRekeningIds = KodeRekening::where('kode', 'like', $kodeRekening->kode . '%')
         ->where('level', 6) // ← Hanya level 6 (leaf nodes)
-        ->forTahun($selectedYear)
         ->pluck('id')
         ->toArray();
     
@@ -388,20 +387,16 @@ public $chartDataPadBreakdown = [
     ];
 }
 
-    private function getAllChildIds($parentId, $tahun = null)
+    private function getAllChildIds($parentId)
     {
         $ids = [];
-        $query = KodeRekening::where('parent_id', $parentId);
-        if ($tahun) {
-            $query->forTahun($tahun);
-        }
-        $children = $query->get();
-
+        $children = KodeRekening::where('parent_id', $parentId)->get();
+            
         foreach ($children as $child) {
             $ids[] = $child->id;
-            $ids = array_merge($ids, $this->getAllChildIds($child->id, $tahun));
+            $ids = array_merge($ids, $this->getAllChildIds($child->id));
         }
-
+        
         return $ids;
     }
 
@@ -513,9 +508,9 @@ public $chartDataPadBreakdown = [
         
         for ($i = 1; $i <= 12; $i++) {
             // PAD
-            $padKode = KodeRekening::where('kode', '4.1')->forTahun($selectedYear)->first();
+            $padKode = KodeRekening::where('kode', '4.1')->first();
             if ($padKode) {
-                $padIds = $this->getAllChildIds($padKode->id, $selectedYear);
+                $padIds = $this->getAllChildIds($padKode->id);
                 $padIds[] = $padKode->id;
                 
                 $query = Penerimaan::whereIn('kode_rekening_id', $padIds)
@@ -532,9 +527,9 @@ public $chartDataPadBreakdown = [
             }
             
             // Transfer
-            $transferKode = KodeRekening::where('kode', '4.2')->forTahun($selectedYear)->first();
+            $transferKode = KodeRekening::where('kode', '4.2')->first();
             if ($transferKode) {
-                $transferIds = $this->getAllChildIds($transferKode->id, $selectedYear);
+                $transferIds = $this->getAllChildIds($transferKode->id);
                 $transferIds[] = $transferKode->id;
                 
                 $query = Penerimaan::whereIn('kode_rekening_id', $transferIds)
@@ -551,9 +546,9 @@ public $chartDataPadBreakdown = [
             }
             
             // Lain-lain
-            $lainLainKode = KodeRekening::where('kode', '4.3')->forTahun($selectedYear)->first();
+            $lainLainKode = KodeRekening::where('kode', '4.3')->first();
             if ($lainLainKode) {
-                $lainLainIds = $this->getAllChildIds($lainLainKode->id, $selectedYear);
+                $lainLainIds = $this->getAllChildIds($lainLainKode->id);
                 $lainLainIds[] = $lainLainKode->id;
                 
                 $query = Penerimaan::whereIn('kode_rekening_id', $lainLainIds)
@@ -614,9 +609,9 @@ public $chartDataPadBreakdown = [
     
     for ($i = 1; $i <= 12; $i++) {
         // 4.1.01 - Pajak Daerah
-        $pajakKode = KodeRekening::where('kode', '4.1.01')->forTahun($selectedYear)->first();
+        $pajakKode = KodeRekening::where('kode', '4.1.01')->first();
         if ($pajakKode) {
-            $pajakIds = $this->getAllChildIds($pajakKode->id, $selectedYear);
+            $pajakIds = $this->getAllChildIds($pajakKode->id);
             $pajakIds[] = $pajakKode->id;
             
             $query = Penerimaan::whereIn('kode_rekening_id', $pajakIds)
@@ -633,9 +628,9 @@ public $chartDataPadBreakdown = [
         }
         
         // 4.1.02 - Retribusi Daerah
-        $retribusiKode = KodeRekening::where('kode', '4.1.02')->forTahun($selectedYear)->first();
+        $retribusiKode = KodeRekening::where('kode', '4.1.02')->first();
         if ($retribusiKode) {
-            $retribusiIds = $this->getAllChildIds($retribusiKode->id, $selectedYear);
+            $retribusiIds = $this->getAllChildIds($retribusiKode->id);
             $retribusiIds[] = $retribusiKode->id;
             
             $query = Penerimaan::whereIn('kode_rekening_id', $retribusiIds)
@@ -652,9 +647,9 @@ public $chartDataPadBreakdown = [
         }
         
         // 4.1.03 - Hasil Pengelolaan Kekayaan Daerah yang Dipisahkan
-        $hasilKode = KodeRekening::where('kode', '4.1.03')->forTahun($selectedYear)->first();
+        $hasilKode = KodeRekening::where('kode', '4.1.03')->first();
         if ($hasilKode) {
-            $hasilIds = $this->getAllChildIds($hasilKode->id, $selectedYear);
+            $hasilIds = $this->getAllChildIds($hasilKode->id);
             $hasilIds[] = $hasilKode->id;
             
             $query = Penerimaan::whereIn('kode_rekening_id', $hasilIds)
@@ -671,9 +666,9 @@ public $chartDataPadBreakdown = [
         }
         
         // 4.1.04 - Lain-lain PAD yang Sah
-        $lainKode = KodeRekening::where('kode', '4.1.04')->forTahun($selectedYear)->first();
+        $lainKode = KodeRekening::where('kode', '4.1.04')->first();
         if ($lainKode) {
-            $lainIds = $this->getAllChildIds($lainKode->id, $selectedYear);
+            $lainIds = $this->getAllChildIds($lainKode->id);
             $lainIds[] = $lainKode->id;
             
             $query = Penerimaan::whereIn('kode_rekening_id', $lainIds)
@@ -715,16 +710,10 @@ public $chartDataPadBreakdown = [
 
     private function loadKategoriData()
     {
-        // Get tahun for filtering
-        $tahunAnggaran = TahunAnggaran::find($this->selectedTahunAnggaran);
-        $selectedYear = $tahunAnggaran ? $tahunAnggaran->tahun : null;
-
         // Get level 2 kode rekening
-        $query = KodeRekening::where('level', 2);
-        if ($selectedYear) {
-            $query->forTahun($selectedYear);
-        }
-        $level2 = $query->orderBy('kode')->get();
+        $level2 = KodeRekening::where('level', 2)
+            ->orderBy('kode')
+            ->get();
             
         $this->kategoris = [];
         

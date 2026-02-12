@@ -23,13 +23,9 @@ class Index extends Component
     public $perPage = 25;
     public $perPageOptions = [10, 25, 50, 100, 200, 500];
     
-    // Berlaku mulai filter
-    public $berlakuMulaiFilter = '';
-
     // Existing properties
     public $showHierarchy = false; // DIUBAH default ke false untuk table view
     public $importFile;
-    public $importBerlakuMulai = 2022;
     public $showImportModal = false;
     public $importErrors = [];
     protected $paginationTheme = 'bootstrap';
@@ -68,11 +64,6 @@ class Index extends Component
     {
         $this->resetPage();
     }
-
-    public function updatedBerlakuMulaiFilter()
-    {
-        $this->resetPage();
-    }
     
     public function toggleImportModal()
     {
@@ -89,7 +80,7 @@ class Index extends Component
         
         try {
             // Import data
-            $import = new KodeRekeningImport($this->importBerlakuMulai);
+            $import = new KodeRekeningImport;
             Excel::import($import, $this->importFile);
             
             // Get import statistics
@@ -193,7 +184,6 @@ class Index extends Component
         $this->search = '';
         $this->levelFilter = '';
         $this->statusFilter = '';
-        $this->berlakuMulaiFilter = '';
         $this->perPage = 25;
         $this->showHierarchy = false;
         $this->resetPage();
@@ -275,27 +265,15 @@ class Index extends Component
             if ($this->statusFilter !== '') {
                 $query->where('is_active', $this->statusFilter);
             }
-
-            if ($this->berlakuMulaiFilter !== '') {
-                $query->where('berlaku_mulai', $this->berlakuMulaiFilter);
-            }
             
             // Order and paginate
             $kodeRekening = $query->orderBy('kode')
                                   ->paginate($this->perPage);
             
-            // Get distinct berlaku_mulai years for filter dropdown
-            $berlakuMulaiYears = KodeRekening::distinct()
-                ->whereNotNull('berlaku_mulai')
-                ->orderBy('berlaku_mulai')
-                ->pluck('berlaku_mulai')
-                ->toArray();
-
             return view('livewire.kode-rekening.index', [
                 'kodeRekening' => $kodeRekening,
                 'levels' => [1, 2, 3, 4, 5, 6],
-                'perPageOptions' => $this->perPageOptions,
-                'berlakuMulaiYears' => $berlakuMulaiYears,
+                'perPageOptions' => $this->perPageOptions
             ]);
         }
     }

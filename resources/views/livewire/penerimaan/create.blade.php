@@ -121,98 +121,30 @@
                 <!-- ============================================ -->
                 <!-- KODE REKENING -->
                 <!-- ============================================ -->
-                <div class="mb-3" x-data="{
-                    open: false,
-                    search: '',
-                    selectedId: @entangle('kode_rekening_id'),
-                    items: @js($kodeRekeningLevel6->map(fn($kr) => ['id' => $kr->id, 'kode' => $kr->kode, 'nama' => $kr->nama])->values()->toArray()),
-                    get filtered() {
-                        if (!this.search) return this.items;
-                        const s = this.search.toLowerCase();
-                        return this.items.filter(i => i.kode.toLowerCase().includes(s) || i.nama.toLowerCase().includes(s));
-                    },
-                    get selectedLabel() {
-                        const item = this.items.find(i => i.id == this.selectedId);
-                        return item ? item.kode + ' - ' + item.nama : '';
-                    },
-                    select(item) {
-                        this.selectedId = item.id;
-                        this.search = '';
-                        this.open = false;
-                    },
-                    clear() {
-                        this.selectedId = '';
-                        this.search = '';
-                        this.$refs.searchInput.focus();
-                    }
-                }" @click.outside="open = false" @keydown.escape.window="open = false">
-                    <label class="form-label fw-bold">
+                <div class="mb-3">
+                    <label for="kode_rekening_id" class="form-label fw-bold">
                         <i class="bx bx-list-ol"></i> Kode Rekening <span class="text-danger">*</span>
                     </label>
-
-                    <div class="position-relative">
-                        {{-- Display selected or search input --}}
-                        <div class="form-control d-flex align-items-center cursor-pointer @error('kode_rekening_id') is-invalid @enderror"
-                             style="min-height: 38px; cursor: pointer;"
-                             @click="open = !open; $nextTick(() => { if(open) $refs.searchInput.focus() })">
-                            <template x-if="!open && selectedId">
-                                <div class="d-flex align-items-center justify-content-between w-100">
-                                    <span class="text-truncate" x-text="selectedLabel"></span>
-                                    <button type="button" class="btn-close btn-close-sm ms-2"
-                                            style="font-size: 0.6rem;"
-                                            @click.stop="clear()" title="Hapus pilihan"></button>
-                                </div>
-                            </template>
-                            <template x-if="!open && !selectedId">
-                                <span class="text-muted">Pilih Kode Rekening</span>
-                            </template>
-                            <template x-if="open">
-                                <input type="text"
-                                       x-ref="searchInput"
-                                       x-model="search"
-                                       class="border-0 w-100 p-0"
-                                       style="outline: none; box-shadow: none;"
-                                       placeholder="Ketik kode atau nama rekening..."
-                                       @keydown.tab="open = false"
-                                       @click.stop>
-                            </template>
-                        </div>
-
-                        @error('kode_rekening_id')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-
-                        {{-- Dropdown list --}}
-                        <div x-show="open" x-transition.opacity
-                             class="position-absolute w-100 bg-white border rounded-bottom shadow-lg"
-                             style="z-index: 1050; max-height: 280px; overflow-y: auto; top: 100%; left: 0;">
-                            <template x-if="filtered.length === 0">
-                                <div class="px-3 py-2 text-muted small">
-                                    <i class="bx bx-search-alt"></i> Tidak ditemukan
-                                </div>
-                            </template>
-                            <template x-for="item in filtered" :key="item.id">
-                                <div class="px-3 py-2 border-bottom"
-                                     style="cursor: pointer; font-size: 0.875rem;"
-                                     :class="{ 'bg-primary text-white': item.id == selectedId, 'hover-bg': item.id != selectedId }"
-                                     @click="select(item)">
-                                    <span class="fw-semibold" x-text="item.kode"></span>
-                                    <span class="ms-1" :class="item.id == selectedId ? 'text-white' : 'text-muted'">-</span>
-                                    <span class="ms-1" x-text="item.nama"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
+                    <select class="form-select @error('kode_rekening_id') is-invalid @enderror" 
+                        id="kode_rekening_id" wire:model="kode_rekening_id">
+                        <option value="">Pilih Kode Rekening</option>
+                        @foreach($kodeRekeningLevel6 as $kr)
+                            <option value="{{ $kr->id }}">{{ $kr->kode }} - {{ $kr->nama }}</option>
+                        @endforeach
+                    </select>
+                    @error('kode_rekening_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    
                     @if(count($kodeRekeningLevel6) > 0)
                         <div class="form-text">
-                            <i class="bx bx-check-circle text-success"></i>
+                            <i class="bx bx-check-circle text-success"></i> 
                             {{ count($kodeRekeningLevel6) }} kode rekening tersedia untuk SKPD ini
                         </div>
                     @else
                         <div class="form-text text-warning">
-                            <i class="bx bx-error-circle"></i>
-                            Tidak ada kode rekening yang tersedia.
+                            <i class="bx bx-error-circle"></i> 
+                            Tidak ada kode rekening yang tersedia. 
                             @if($showSkpdDropdown)
                                 Pilih SKPD yang memiliki assignment kode rekening.
                             @else
@@ -220,10 +152,6 @@
                             @endif
                         </div>
                     @endif
-
-                    <style>
-                        .hover-bg:hover { background-color: #f0f4ff; }
-                    </style>
                 </div>
                 
                 <!-- ============================================ -->

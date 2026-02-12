@@ -154,19 +154,9 @@
                                                                    ->get();
                         @endphp
                         
-                        @php
-                            $countByGen = $kodeDetails->groupBy('berlaku_mulai');
-                        @endphp
                         <div class="alert alert-info py-2">
-                            <i class="bx bx-info-circle"></i>
+                            <i class="bx bx-info-circle"></i> 
                             Total: <strong>{{ count($access) }} kode rekening</strong> yang dapat diakses
-                            @if($countByGen->count() > 1)
-                                <br><small>
-                                    @foreach($countByGen as $gen => $items)
-                                        <span class="badge bg-{{ $gen >= 2026 ? 'info' : 'secondary' }} me-1">{{ $gen }}: {{ $items->count() }} kode</span>
-                                    @endforeach
-                                </small>
-                            @endif
                         </div>
                         
                         @if($kodeDetails->count() > 0)
@@ -174,9 +164,8 @@
                                 <table class="table table-sm table-hover">
                                     <thead class="table-light sticky-top">
                                         <tr>
-                                            <th width="18%">Kode</th>
-                                            <th width="62%">Uraian</th>
-                                            <th width="20%" class="text-center">Berlaku Mulai</th>
+                                            <th width="20%">Kode</th>
+                                            <th width="80%">Uraian</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -184,11 +173,6 @@
                                         <tr>
                                             <td class="text-nowrap"><code>{{ $kode->kode }}</code></td>
                                             <td style="white-space: normal; word-wrap: break-word;">{{ $kode->nama }}</td>
-                                            <td class="text-center">
-                                                <span class="badge bg-{{ $kode->berlaku_mulai >= 2026 ? 'info' : 'secondary' }}">
-                                                    {{ $kode->berlaku_mulai ?? '-' }}
-                                                </span>
-                                            </td>
                                         </tr>
                                         @endforeach
                                     </tbody>
@@ -225,25 +209,9 @@
                 <div class="modal-body">
                     @if($selectedSkpd)
                     <div class="alert alert-info py-2">
-                        <i class="bx bx-info-circle"></i>
+                        <i class="bx bx-info-circle"></i> 
                         Pilih kode rekening yang dapat diakses oleh <strong>{{ $selectedSkpd->nama_opd }}</strong>.
                         Check parent akan otomatis check semua children.
-                    </div>
-
-                    <!-- Filter Berlaku Mulai -->
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold">Filter Kode Rekening</label>
-                            <select class="form-select" wire:model.live="assignTahunFilter">
-                                <option value="">Semua Generasi</option>
-                                @php
-                                    $berlakuYears = \App\Models\KodeRekening::distinct()->whereNotNull('berlaku_mulai')->orderBy('berlaku_mulai')->pluck('berlaku_mulai');
-                                @endphp
-                                @foreach($berlakuYears as $year)
-                                    <option value="{{ $year }}">Berlaku mulai {{ $year }}</option>
-                                @endforeach
-                            </select>
-                        </div>
                     </div>
                     
                     <!-- Loading -->

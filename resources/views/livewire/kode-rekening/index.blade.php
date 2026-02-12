@@ -44,17 +44,6 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">BERLAKU MULAI</label>
-                    <select class="form-select" wire:model.live="berlakuMulaiFilter">
-                        <option value="">Semua Tahun</option>
-                        @foreach($berlakuMulaiYears as $year)
-                            <option value="{{ $year }}">{{ $year }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-            <div class="row mb-3">
-                <div class="col-md-2">
                     <label class="form-label">TAMPILKAN</label>
                     <select class="form-select" wire:model.live="perPage">
                         @foreach($perPageOptions as $option)
@@ -133,10 +122,9 @@
                         <tr>
                             <th width="5%" class="text-center">NO</th>
                             <th width="15%">KODE</th>
-                            <th width="35%">NAMA</th>
-                            <th width="8%" class="text-center">LEVEL</th>
-                            <th width="10%" class="text-center">BERLAKU MULAI</th>
-                            <th width="8%" class="text-center">STATUS</th>
+                            <th width="45%">NAMA</th>
+                            <th width="10%" class="text-center">LEVEL</th>
+                            <th width="10%" class="text-center">STATUS</th>
                             {{-- Kolom Aksi - Hide untuk Viewer --}}
                             @canany(['edit-kode-rekening', 'delete-kode-rekening'])
                             <th width="15%" class="text-center">AKSI</th>
@@ -159,9 +147,6 @@
                                 <span class="badge bg-{{ $kode->level == 1 ? 'primary' : ($kode->level == 2 ? 'info' : ($kode->level == 3 ? 'success' : ($kode->level == 4 ? 'warning' : ($kode->level == 5 ? 'danger' : 'secondary')))) }}">
                                     LEVEL {{ $kode->level }}
                                 </span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-outline-dark">{{ $kode->berlaku_mulai ?? '-' }}</span>
                             </td>
                             <td class="text-center">
                                 @if($kode->is_active)
@@ -193,7 +178,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->canany(['edit-kode-rekening', 'delete-kode-rekening']) ? '7' : '6' }}" 
+                            <td colspan="{{ auth()->user()->canany(['edit-kode-rekening', 'delete-kode-rekening']) ? '6' : '5' }}" 
                                 class="text-center py-4">
                                 <i class="bx bx-inbox fs-1 text-muted"></i>
                                 <p class="text-muted mt-2">Tidak ada data kode rekening</p>
@@ -275,13 +260,6 @@
                             @endif
                         </div>
                         
-                        <div class="mb-3">
-                            <label class="form-label">Berlaku Mulai (Tahun) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" wire:model="importBerlakuMulai"
-                                   min="2020" max="2099" placeholder="Contoh: 2026">
-                            <small class="text-muted">Tahun berlaku kode rekening yang diimport. Default: 2022 (kode lama)</small>
-                        </div>
-
                         <div class="alert alert-info">
                             <h6 class="alert-heading"><i class="bx bx-info-circle"></i> Format Excel yang dibutuhkan:</h6>
                             <hr>
@@ -290,9 +268,8 @@
                                 <li>Kolom A: <strong>kode</strong> (contoh: 4, 4.1, 4.1.01)</li>
                                 <li>Kolom B: <strong>nama</strong></li>
                                 <li>Kolom C: <strong>level</strong> (1-6)</li>
-                                <li>Kolom D (opsional): <strong>berlaku_mulai</strong> (tahun, contoh: 2026)</li>
                                 <li>Semua kode akan diimport dengan status aktif</li>
-                                <li>Parent harus ada sebelum child (dalam generasi yang sama)</li>
+                                <li>Parent harus ada sebelum child</li>
                             </ul>
                         </div>
                     </div>

@@ -143,15 +143,7 @@ class Edit extends Component
         $user = auth()->user();
         $query = KodeRekening::where('level', 6) // ✅ LEVEL 6
                              ->where('is_active', true);
-
-        // Filter berdasarkan tahun berlaku
-        if ($this->tahunAnggaranId) {
-            $ta = TahunAnggaran::find($this->tahunAnggaranId);
-            if ($ta) {
-                $query->forTahun($ta->tahun);
-            }
-        }
-
+        
         if ($user->isSuperAdmin()) {
             // Super Admin - filter by selected SKPD
             if ($this->selectedSkpdId) {

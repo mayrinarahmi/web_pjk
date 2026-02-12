@@ -21,12 +21,8 @@ class LaporanRealisasiService
             
         $tahunAnggaranId = $tahunAnggaran ? $tahunAnggaran->id : null;
         
-        // Get semua kode rekening dengan urutan yang benar (filter by tahun berlaku)
-        $query = KodeRekening::where('is_active', 1);
-        if ($tahun) {
-            $query->forTahun($tahun);
-        }
-        $kodeRekenings = $query
+        // Get semua kode rekening dengan urutan yang benar
+        $kodeRekenings = KodeRekening::where('is_active', 1)
             ->orderByRaw("CAST(SUBSTRING_INDEX(kode, '.', 1) AS UNSIGNED),
                          CAST(IFNULL(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(kode, '.', 2), '.', -1), SUBSTRING_INDEX(kode, '.', 1)), '0') AS UNSIGNED),
                          CAST(IFNULL(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(kode, '.', 3), '.', -1), SUBSTRING_INDEX(kode, '.', 2)), '0') AS UNSIGNED),

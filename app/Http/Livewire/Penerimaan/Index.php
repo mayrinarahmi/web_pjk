@@ -131,14 +131,12 @@ class Index extends Component
             $roleName = $user->isSuperAdmin() ? 'Super Admin' : 'Kepala BPKPAD';
             $this->userSkpdInfo = $roleName . ' - Semua SKPD';
             
-            // Load semua kode rekening level 6 sesuai tahun
-            $query = KodeRekening::where('level', 6)
-                                 ->where('is_active', true);
-            if ($this->tahun) {
-                $query->forTahun($this->tahun);
-            }
-            $this->kodeRekeningLevel6 = $query->orderBy('kode')->get();
-
+            // Load semua kode rekening level 6
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
+                                                    
         } elseif ($user->skpd_id && $user->skpd) {
             // Operator SKPD - hanya SKPD sendiri
             $this->selectedSkpdId = $user->skpd_id;
@@ -234,11 +232,7 @@ class Index extends Component
     public function updatedTahun()
     {
         $this->resetPage();
-
-        // Reload kode rekening dropdown sesuai tahun baru (generasi bisa berubah)
-        $this->initializeUserContext(auth()->user());
-        $this->kodeRekeningId = null;
-
+        
         // Auto-set tanggal ke data terakhir
         $this->setTanggalToLatestData();
     }
@@ -288,14 +282,12 @@ class Index extends Component
                 $skpdAccess = $selectedSkpd->kode_rekening_access ?? [];
                 
                 if (!empty($skpdAccess)) {
-                    // Load kode rekening level 6 yang di-assign sesuai tahun
-                    $skpdQuery = KodeRekening::whereIn('id', $skpdAccess)
-                                             ->where('level', 6)
-                                             ->where('is_active', true);
-                    if ($this->tahun) {
-                        $skpdQuery->forTahun($this->tahun);
-                    }
-                    $this->kodeRekeningLevel6 = $skpdQuery->orderBy('kode')->get();
+                    // Load kode rekening level 6 yang di-assign
+                    $this->kodeRekeningLevel6 = KodeRekening::whereIn('id', $skpdAccess)
+                                                            ->where('level', 6)
+                                                            ->where('is_active', true)
+                                                            ->orderBy('kode')
+                                                            ->get();
                 } else {
                     // SKPD belum ada assignment
                     $this->kodeRekeningLevel6 = collect([]);
@@ -303,13 +295,11 @@ class Index extends Component
                 }
             }
         } else {
-            // "Semua SKPD" dipilih - load semua kode rekening sesuai tahun
-            $allQuery = KodeRekening::where('level', 6)
-                                    ->where('is_active', true);
-            if ($this->tahun) {
-                $allQuery->forTahun($this->tahun);
-            }
-            $this->kodeRekeningLevel6 = $allQuery->orderBy('kode')->get();
+            // "Semua SKPD" dipilih - load semua kode rekening
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
         }
         
         // Update latest date based on new SKPD filter
@@ -375,19 +365,13 @@ class Index extends Component
         if ($user->canViewAllSkpd()) {
             $this->selectedSkpdId = '';
             
-            // Reset tahun ke aktif dulu agar forTahun bisa bekerja
-            $activeTahun = TahunAnggaran::getActive();
-            $resetTahun = $activeTahun ? $activeTahun->tahun : Carbon::now()->year;
-
-            // Load semua kode rekening sesuai tahun
-            $resetQuery = KodeRekening::where('level', 6)
-                                      ->where('is_active', true);
-            if ($resetTahun) {
-                $resetQuery->forTahun($resetTahun);
-            }
-            $this->kodeRekeningLevel6 = $resetQuery->orderBy('kode')->get();
+            // Load semua kode rekening
+            $this->kodeRekeningLevel6 = KodeRekening::where('level', 6)
+                                                    ->where('is_active', true)
+                                                    ->orderBy('kode')
+                                                    ->get();
         }
-
+        
         // Reset tahun ke aktif
         $activeTahun = TahunAnggaran::getActive();
         $this->tahun = $activeTahun ? $activeTahun->tahun : Carbon::now()->year;
@@ -784,12 +768,7 @@ public function deleteAllPenerimaan()
         // STEP 3: Build Kode Rekening Query
         // ========================================
         $query = KodeRekening::where('is_active', true);
-
-        // Filter kode rekening berdasarkan tahun berlaku
-        if ($this->tahun) {
-            $query->forTahun($this->tahun);
-        }
-
+        
         // Apply allowed kode filter
         if (!empty($allowedKodeIds)) {
             $query->whereIn('id', $allowedKodeIds);

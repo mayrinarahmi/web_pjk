@@ -58,7 +58,7 @@ class PublicDashboardController extends Controller
                 }
                 
                 // Root kode rekening (4 = Pendapatan)
-                $rootKode = KodeRekening::where('kode', '4')->forTahun($tahun)->first();
+                $rootKode = KodeRekening::where('kode', '4')->first();
                 
                 if (!$rootKode || !$tahunAnggaran) {
                     return $this->getEmptySummary();
@@ -106,9 +106,9 @@ class PublicDashboardController extends Controller
                 }
                 
                 // Get breakdown by category (PAD, Transfer, Lain-lain)
-                $padKode = KodeRekening::where('kode', '4.1')->forTahun($tahun)->first();
-                $transferKode = KodeRekening::where('kode', '4.2')->forTahun($tahun)->first();
-                $lainLainKode = KodeRekening::where('kode', '4.3')->forTahun($tahun)->first();
+                $padKode = KodeRekening::where('kode', '4.1')->first();
+                $transferKode = KodeRekening::where('kode', '4.2')->first();
+                $lainLainKode = KodeRekening::where('kode', '4.3')->first();
                 
                 // PAD
                 $padTarget = 0;
@@ -117,7 +117,6 @@ class PublicDashboardController extends Controller
                     $padTarget = $padKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
                     $padIds = KodeRekening::where('kode', 'like', $padKode->kode . '%')
                         ->where('level', 6)
-                        ->forTahun($tahun)
                         ->pluck('id')
                         ->toArray();
                     $padRealisasi = Penerimaan::where('tahun', $tahun)
@@ -133,7 +132,6 @@ class PublicDashboardController extends Controller
                     $transferTarget = $transferKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
                     $transferIds = KodeRekening::where('kode', 'like', $transferKode->kode . '%')
                         ->where('level', 6)
-                        ->forTahun($tahun)
                         ->pluck('id')
                         ->toArray();
                     $transferRealisasi = Penerimaan::where('tahun', $tahun)
@@ -149,7 +147,6 @@ class PublicDashboardController extends Controller
                     $lainTarget = $lainLainKode->getTargetAnggaranForTahun($tahunAnggaran->id, null);
                     $lainIds = KodeRekening::where('kode', 'like', $lainLainKode->kode . '%')
                         ->where('level', 6)
-                        ->forTahun($tahun)
                         ->pluck('id')
                         ->toArray();
                     $lainRealisasi = Penerimaan::where('tahun', $tahun)
@@ -258,12 +255,12 @@ class PublicDashboardController extends Controller
                 $dataPerSkpd = [];
                 
                 // Root kode rekening
-                $rootKode = KodeRekening::where('kode', '4')->forTahun($tahun)->first();
-
+                $rootKode = KodeRekening::where('kode', '4')->first();
+                
                 if (!$rootKode) {
                     return [];
                 }
-
+                
                 foreach ($skpdList as $skpd) {
                     // Get target untuk SKPD ini
                     $target = $rootKode->getTargetAnggaranForTahun($tahunAnggaran->id, $skpd->id);
@@ -334,17 +331,15 @@ class PublicDashboardController extends Controller
                 $level2Categories = KodeRekening::where('level', 2)
                     ->where('kode', 'like', '4.%')
                     ->where('is_active', true)
-                    ->forTahun($tahun)
                     ->get();
-
+                
                 $categories = [];
-
+                
                 foreach ($level2Categories as $category) {
                     // Get all Level 6 IDs under this category
                     $level6Ids = KodeRekening::where('kode', 'like', $category->kode . '%')
                         ->where('level', 6)
                         ->where('is_active', true)
-                        ->forTahun($tahun)
                         ->pluck('id')
                         ->toArray();
                     
@@ -416,9 +411,9 @@ class PublicDashboardController extends Controller
                 $months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
                 
                 // Get Level 2 categories
-                $padKode = KodeRekening::where('kode', '4.1')->forTahun($tahun)->first();
-                $transferKode = KodeRekening::where('kode', '4.2')->forTahun($tahun)->first();
-                $lainLainKode = KodeRekening::where('kode', '4.3')->forTahun($tahun)->first();
+                $padKode = KodeRekening::where('kode', '4.1')->first();
+                $transferKode = KodeRekening::where('kode', '4.2')->first();
+                $lainLainKode = KodeRekening::where('kode', '4.3')->first();
                 
                 $padData = [];
                 $transferData = [];
@@ -429,7 +424,6 @@ class PublicDashboardController extends Controller
                     if ($padKode) {
                         $padIds = KodeRekening::where('kode', 'like', $padKode->kode . '%')
                             ->where('level', 6)
-                            ->forTahun($tahun)
                             ->pluck('id')
                             ->toArray();
                         
@@ -445,7 +439,6 @@ class PublicDashboardController extends Controller
                     if ($transferKode) {
                         $transferIds = KodeRekening::where('kode', 'like', $transferKode->kode . '%')
                             ->where('level', 6)
-                            ->forTahun($tahun)
                             ->pluck('id')
                             ->toArray();
                         
@@ -461,7 +454,6 @@ class PublicDashboardController extends Controller
                     if ($lainLainKode) {
                         $lainLainIds = KodeRekening::where('kode', 'like', $lainLainKode->kode . '%')
                             ->where('level', 6)
-                            ->forTahun($tahun)
                             ->pluck('id')
                             ->toArray();
                         
