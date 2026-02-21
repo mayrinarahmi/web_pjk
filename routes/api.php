@@ -83,6 +83,9 @@ Route::prefix('public')->group(function () {
     // Min 2 characters, returns max 20 results
     Route::get('/search', [PublicDashboardController::class, 'searchKodeRekening']);
     
+    // Available years (from tahun_anggaran table)
+    Route::get('/available-years', [PublicDashboardController::class, 'getAvailableYears']);
+
     // Clear cache (optional - can be restricted with auth if needed)
     Route::post('/clear-cache', [PublicDashboardController::class, 'clearCache']);
 });

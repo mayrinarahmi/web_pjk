@@ -48,15 +48,18 @@ class PublicDashboardController extends Controller
             
             $data = Cache::remember($cacheKey, $this->cacheTime, function () use ($tahun) {
                 
-                // Get tahun anggaran aktif atau berdasarkan tahun
+                // Get tahun anggaran: aktif untuk tahun ini, fallback ke perubahan atau murni
                 $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)
                     ->where('is_active', true)
                     ->first();
-                
+
                 if (!$tahunAnggaran) {
-                    $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)->first();
+                    // Prioritaskan Perubahan (versi final), fallback ke Murni
+                    $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)
+                        ->orderByRaw("FIELD(jenis_anggaran, 'perubahan', 'murni')")
+                        ->first();
                 }
-                
+
                 // Root kode rekening (4 = Pendapatan)
                 $rootKode = KodeRekening::where('kode', '4')->forTahun($tahun)->first();
                 
@@ -240,11 +243,14 @@ class PublicDashboardController extends Controller
                 $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)
                     ->where('is_active', true)
                     ->first();
-                
+
                 if (!$tahunAnggaran) {
-                    $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)->first();
+                    // Prioritaskan Perubahan (versi final), fallback ke Murni
+                    $tahunAnggaran = TahunAnggaran::where('tahun', $tahun)
+                        ->orderByRaw("FIELD(jenis_anggaran, 'perubahan', 'murni')")
+                        ->first();
                 }
-                
+
                 if (!$tahunAnggaran) {
                     return [];
                 }
@@ -256,18 +262,19 @@ class PublicDashboardController extends Controller
                     ->get();
                 
                 $dataPerSkpd = [];
-                
-                // Root kode rekening
-                $rootKode = KodeRekening::where('kode', '4')->forTahun($tahun)->first();
-
-                if (!$rootKode) {
-                    return [];
-                }
 
                 foreach ($skpdList as $skpd) {
-                    // Get target untuk SKPD ini
-                    $target = $rootKode->getTargetAnggaranForTahun($tahunAnggaran->id, $skpd->id);
-                    
+                    // Ambil kode_rekening IDs (level 6) yang dimiliki SKPD ini
+                    $accessIds = $skpd->kode_rekening_access;
+                    if (empty($accessIds)) {
+                        continue;
+                    }
+
+                    // Hitung target dari target_anggaran berdasarkan kode_rekening_access
+                    $target = TargetAnggaran::whereIn('kode_rekening_id', $accessIds)
+                        ->where('tahun_anggaran_id', $tahunAnggaran->id)
+                        ->sum('jumlah');
+
                     // Skip jika tidak ada pagu
                     if ($target <= 0) {
                         continue;
@@ -579,6 +586,38 @@ class PublicDashboardController extends Controller
                     'growth' => []
                 ]
             ], 500);
+        }
+    }
+
+    /**
+     * Get available years from tahun_anggaran table
+     */
+    public function getAvailableYears()
+    {
+        try {
+            $years = TahunAnggaran::distinct()
+                ->orderBy('tahun', 'desc')
+                ->pluck('tahun')
+                ->map(fn($y) => (int) $y)
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $activeYear = TahunAnggaran::where('is_active', true)->value('tahun');
+
+            return response()->json([
+                'success' => true,
+                'data' => $years,
+                'active_year' => $activeYear ? (int) $activeYear : (int) date('Y'),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get Available Years Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'data' => [(int) date('Y')],
+                'active_year' => (int) date('Y'),
+            ]);
         }
     }
 

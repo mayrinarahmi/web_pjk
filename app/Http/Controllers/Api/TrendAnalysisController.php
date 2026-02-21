@@ -75,12 +75,13 @@ class TrendAnalysisController extends Controller
             if ($view === 'monthly') {
                 $currentYear = date('Y');
                 $data = $this->trendService->getMonthlyChartData(
-                    $level, 
-                    $parentKode, 
-                    $currentYear, 
-                    10, 
+                    $level,
+                    $parentKode,
+                    $currentYear,
+                    10,
                     $specificId,  // Pass specificId
-                    $month        // Pass month filter
+                    $month,       // Pass month filter
+                    $years        // Pass years range so period buttons work
                 );
             } else {
                 $data = $this->trendService->getYearlyChartData(

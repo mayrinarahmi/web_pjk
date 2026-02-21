@@ -122,6 +122,12 @@ function initializeEventListeners() {
     if (resetBtn) {
         resetBtn.addEventListener('click', debounce(handleReset, 300));
     }
+
+    // Clear Cache button
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    if (clearCacheBtn) {
+        clearCacheBtn.addEventListener('click', clearCache);
+    }
     
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
@@ -369,7 +375,10 @@ async function loadChartData(type, categoryId = null, noCache = false) {
     
     // Set loading state
     setLoadingState(true);
-    
+
+    // Destroy old chart immediately so stale series data doesn't show during load
+    destroyExistingChart();
+
     try {
         // Build URL based on type
         let url;
@@ -1006,14 +1015,22 @@ function displayModalSearchResults(results) {
         
         groupedByLevel[level].forEach(result => {
             const levelColor = getLevelColor(result.level);
+            const berlakuMulai = result.berlaku_mulai || null;
+            const yearBadge = berlakuMulai
+                ? `<span class="badge ms-1" style="background-color:${berlakuMulai >= 2026 ? '#0d6efd' : '#fd7e14'};" title="Berlaku mulai: ${berlakuMulai}" data-bs-toggle="tooltip" data-bs-placement="top">${berlakuMulai}</span>`
+                : '';
             html += `
-                <div class="search-result-item mb-2" data-id="${result.id}" data-nama="${result.nama}" data-level="${result.level}">
+                <div class="search-result-item mb-2" data-id="${result.id}" data-nama="${result.nama}" data-level="${result.level}"
+                     title="Berlaku mulai: ${berlakuMulai || '-'}" data-bs-toggle="tooltip" data-bs-placement="right">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="result-kode">${result.kode}</div>
                             <div class="result-nama">${result.nama}</div>
                         </div>
-                        <span class="badge bg-${levelColor}">Level ${result.level}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-${levelColor}">Level ${result.level}</span>
+                            ${yearBadge}
+                        </div>
                     </div>
                 </div>
             `;
@@ -1023,10 +1040,18 @@ function displayModalSearchResults(results) {
     });
     
     container.innerHTML = html;
-    
+
+    // Initialize Bootstrap tooltips for berlaku_mulai info
+    container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        new bootstrap.Tooltip(el, { trigger: 'hover' });
+    });
+
     // Add click handlers
     container.querySelectorAll('.search-result-item').forEach(item => {
         item.addEventListener('click', function() {
+            // Hide any open tooltip before navigating
+            const tip = bootstrap.Tooltip.getInstance(this);
+            if (tip) tip.hide();
             selectCategoryFromModal({
                 id: this.dataset.id,
                 nama: this.dataset.nama,
@@ -1448,15 +1473,6 @@ function hideError() {
  * Add development tools for testing
  */
 function addDevelopmentTools() {
-    // Add clear cache button
-    const headerRow = document.querySelector('.row.mb-4 .col-md-4.text-end');
-    if (headerRow) {
-        const clearCacheBtn = document.createElement('button');
-        clearCacheBtn.className = 'btn btn-warning ms-2';
-        clearCacheBtn.innerHTML = '<i class="bx bx-refresh me-1"></i> Clear Cache';
-        clearCacheBtn.onclick = clearCache;
-        headerRow.appendChild(clearCacheBtn);
-    }
     
     // Export debug functions
     window.trendAnalysisDebug = {

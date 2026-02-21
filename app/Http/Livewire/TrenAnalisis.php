@@ -125,6 +125,11 @@ class TrenAnalisis extends Component
         $this->loadData();
     }
     
+    public function loadInitialData()
+    {
+        $this->loadData();
+    }
+
     public function refreshData()
     {
         $this->loadData();
@@ -186,46 +191,99 @@ class TrenAnalisis extends Component
                     'level' => $this->selectedLevel,
                     'parentKode' => $this->selectedParentKode
                 ]);
-                
-                // Get summary statistics
-                $summaryResult = $this->trendService->getSummaryStatistics(
-                    $this->startYear,
-                    $this->endYear,
+
+                // Step 1: Get growth analysis (shared source for summary, growth chart, table)
+                $growthData = $this->trendService->getGrowthAnalysis(
                     $this->selectedLevel,
-                    $this->selectedParentKode
-                );
-                
-                $this->summaryData = is_array($summaryResult) ? $summaryResult : $this->getDefaultSummaryData();
-                
-                // Get chart data
-                $chartResult = $this->trendService->getChartData(
+                    $this->selectedParentKode,
                     $this->startYear,
-                    $this->endYear,
-                    $this->selectedLevel,
-                    $this->selectedParentKode
+                    $this->endYear
                 );
-                
-                $this->chartData = is_array($chartResult) ? $chartResult : ['categories' => [], 'series' => []];
-                
-                // Get growth chart data
-                $growthResult = $this->trendService->getGrowthChartData(
-                    $this->startYear,
-                    $this->endYear,
+
+                // Step 2: Build summaryData from growthData
+                $topPerformers = [];
+                $decliningCategories = [];
+                $totalCurrentYear = 0;
+                $totalStartYear = 0;
+
+                foreach ($growthData as $item) {
+                    $totalCurrentYear += $item['last_year_total'];
+                    $totalStartYear += $item['first_year_total'];
+
+                    if ($item['growth_percentage'] > 0) {
+                        $topPerformers[] = [
+                            'nama' => $item['nama'],
+                            'avg_growth' => $item['growth_percentage'],
+                        ];
+                    }
+                    if ($item['growth_percentage'] < -10) {
+                        $decliningCategories[] = $item;
+                    }
+                }
+
+                // growthData is already sorted desc by growth_percentage
+                $topPerformers = array_slice($topPerformers, 0, 3);
+
+                $totalGrowth = $totalStartYear > 0
+                    ? round((($totalCurrentYear - $totalStartYear) / $totalStartYear) * 100, 2)
+                    : 0;
+
+                $this->summaryData = [
+                    'total_growth' => $totalGrowth,
+                    'top_performers' => $topPerformers,
+                    'declining_categories' => $decliningCategories,
+                    'average_achievement' => 0,
+                    'total_current_year' => $totalCurrentYear,
+                    'total_start_year' => $totalStartYear,
+                ];
+
+                // Step 3: Trend line chart — yearly data per category
+                $this->chartData = $this->trendService->getYearlyChartData(
                     $this->selectedLevel,
-                    $this->selectedParentKode
+                    $this->selectedParentKode,
+                    $this->yearRange,
+                    10
                 );
-                
-                $this->growthChartData = is_array($growthResult) ? $growthResult : ['categories' => [], 'series' => []];
-                
-                // Get table data
-                $tableResult = $this->trendService->getTableData(
-                    $this->startYear,
-                    $this->endYear,
-                    $this->selectedLevel,
-                    $this->selectedParentKode
-                );
-                
-                $this->tableData = is_array($tableResult) ? $tableResult : [];
+
+                // Step 4: Growth bar chart — top 10 items by growth percentage
+                $topGrowthItems = array_slice($growthData, 0, 10);
+                $this->growthChartData = [
+                    'categories' => array_map(
+                        fn($item) => mb_substr($item['nama'], 0, 25),
+                        $topGrowthItems
+                    ),
+                    'series' => [
+                        [
+                            'name' => 'Growth % (' . $this->startYear . '-' . $this->endYear . ')',
+                            'data' => array_map(fn($item) => $item['growth_percentage'], $topGrowthItems),
+                        ]
+                    ],
+                ];
+
+                // Step 5: Build table rows from growthData
+                $ids = array_column($growthData, 'kode_rekening_id');
+                $kodeMap = !empty($ids)
+                    ? KodeRekening::whereIn('id', $ids)->pluck('kode', 'id')->toArray()
+                    : [];
+
+                $tableRows = [];
+                foreach ($growthData as $item) {
+                    $row = [
+                        'kode'       => $kodeMap[$item['kode_rekening_id']] ?? '-',
+                        'nama'       => $item['nama'],
+                        'avg_growth' => $item['growth_percentage'],
+                    ];
+                    for ($y = $this->startYear; $y <= $this->endYear; $y++) {
+                        $realisasi = $item['yearly_data'][$y] ?? 0;
+                        $row['tahun_' . $y] = [
+                            'realisasi'  => $realisasi,
+                            'target'     => 0,
+                            'persentase' => 0,
+                        ];
+                    }
+                    $tableRows[] = $row;
+                }
+                $this->tableData = $tableRows;
             }
             
             // Dispatch event to update charts
@@ -286,17 +344,44 @@ class TrenAnalisis extends Component
     public function exportExcel()
     {
         try {
-            $exportData = $this->trendService->exportToExcel(
-                $this->startYear,
-                $this->endYear,
+            $growthData = $this->trendService->getGrowthAnalysis(
                 $this->selectedLevel,
-                $this->selectedParentKode
+                $this->selectedParentKode,
+                $this->startYear,
+                $this->endYear
             );
-            
+
+            // Build headers
+            $headers = ['Kode', 'Nama'];
+            for ($y = $this->startYear; $y <= $this->endYear; $y++) {
+                $headers[] = 'Realisasi ' . $y;
+            }
+            $headers[] = 'Growth (%)';
+
+            // Get kode strings
+            $ids = array_column($growthData, 'kode_rekening_id');
+            $kodeMap = !empty($ids)
+                ? KodeRekening::whereIn('id', $ids)->pluck('kode', 'id')->toArray()
+                : [];
+
+            // Build rows
+            $rows = [];
+            foreach ($growthData as $item) {
+                $row = [
+                    $kodeMap[$item['kode_rekening_id']] ?? '-',
+                    $item['nama'],
+                ];
+                for ($y = $this->startYear; $y <= $this->endYear; $y++) {
+                    $row[] = $item['yearly_data'][$y] ?? 0;
+                }
+                $row[] = $item['growth_percentage'];
+                $rows[] = $row;
+            }
+
             $filename = 'analisis-tren-' . $this->startYear . '-' . $this->endYear . '.xlsx';
-            
+
             return Excel::download(
-                new TrendAnalysisExport($exportData),
+                new TrendAnalysisExport(['headers' => $headers, 'data' => $rows]),
                 $filename
             );
         } catch (\Exception $e) {

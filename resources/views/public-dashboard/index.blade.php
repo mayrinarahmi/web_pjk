@@ -747,13 +747,14 @@
                 <div class="flex items-center gap-2.5">
                     <div>
                         <label class="block text-xs font-medium text-gray-700 mb-1">Tahun Anggaran:</label>
-                        <select 
-                            x-model="selectedYear" 
+                        <select
+                            x-model.number="selectedYear"
                             @change="fetchAllData()"
                             class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                            <option value="2024">2024</option>
-                            <option value="2025" selected>2025</option>
+                            <template x-for="year in availableYears" :key="year">
+                                <option :value="year" x-text="year" :selected="year === selectedYear"></option>
+                            </template>
                         </select>
                     </div>
                     
@@ -1046,7 +1047,8 @@
     <script>
         function publicDashboard() {
             return {
-                selectedYear: 2025,
+                selectedYear: new Date().getFullYear(),
+                availableYears: [new Date().getFullYear()],
                 loading: false,
                 summary: {
                     total: null,
@@ -1058,21 +1060,35 @@
                 monthlyChart: null,
                 autoScrollInterval: null,
                 isHovering: false,
-                
+
                 // Info banner
-                lastUpdate: '13 November 2025',
-                totalTransaksi: '15.686',
-                skpdInput: '10',
-                capaianTotal: '94.8%',
-                
-                init() {
+                lastUpdate: '-',
+                totalTransaksi: '-',
+                skpdInput: '-',
+                capaianTotal: '-',
+
+                async init() {
+                    await this.fetchAvailableYears();
                     this.fetchAllData();
                     this.startAutoScroll();
                 },
                 
+                async fetchAvailableYears() {
+                    try {
+                        const response = await fetch('/api/public/available-years');
+                        const result = await response.json();
+                        if (result.success && result.data.length > 0) {
+                            this.availableYears = result.data;
+                            this.selectedYear = result.active_year || result.data[0];
+                        }
+                    } catch (error) {
+                        console.error('Error fetching available years:', error);
+                    }
+                },
+
                 async fetchAllData() {
                     this.loading = true;
-                    
+
                     try {
                         await Promise.all([
                             this.fetchSummary(),

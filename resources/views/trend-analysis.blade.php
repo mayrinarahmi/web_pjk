@@ -25,13 +25,18 @@
         <h4 class="page-title mb-1">Trend Analysis Penerimaan</h4>
         <p class="text-muted mb-0">Analisis trend penerimaan daerah multi-tahun</p>
     </div>
-        <div class="col-md-4 text-end">
-            <button class="btn btn-primary" id="searchModalBtn">
-                <i class="bx bx-search me-1"></i> Cari Kategori
-            </button>
-            <button class="btn btn-outline-danger" id="resetBtn" style="display: none;">
-                <i class="bx bx-reset me-1"></i> Reset
-            </button>
+        <div class="col-md-4">
+            <div class="d-flex gap-2 justify-content-end flex-wrap">
+                <button class="btn btn-primary" id="searchModalBtn">
+                    <i class="bx bx-search me-1"></i> Cari Kategori
+                </button>
+                <button class="btn btn-outline-danger" id="resetBtn" style="display: none;">
+                    <i class="bx bx-reset me-1"></i> Reset
+                </button>
+                <button class="btn btn-warning" id="clearCacheBtn">
+                    <i class="bx bx-refresh me-1"></i> Clear Cache
+                </button>
+            </div>
         </div>
     </div>
 

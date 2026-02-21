@@ -84,15 +84,21 @@ class TrendAnalysisService
                         ->groupBy('tahun')
                         ->orderBy('tahun')
                         ->get();
-                    
+
+                    // Build dataMap for quick lookup
+                    $dataMap = [];
+                    foreach ($data as $row) {
+                        $dataMap[$row->tahun] = (float)$row->total;
+                    }
+
+                    // Build full year range — include years without data as 0
                     $categories = [];
                     $seriesData = [];
-                    
-                    foreach ($data as $row) {
-                        $categories[] = (string)$row->tahun;
-                        $seriesData[] = (float)$row->total;
+                    for ($year = $startYear; $year <= $currentYear; $year++) {
+                        $categories[] = (string)$year;
+                        $seriesData[] = $dataMap[$year] ?? 0;
                     }
-                    
+
                     return [
                         'categories' => $categories,
                         'series' => [
@@ -177,23 +183,23 @@ class TrendAnalysisService
      * Get monthly chart data with proper filtering for level 3, 4, 5, 6
      * UPDATED: Added aggregation for Level 3, 4, 5
      */
-     public function getMonthlyChartData($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null)
+     public function getMonthlyChartData($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null, $years = 3)
     {
-        $cacheKey = "monthly_chart_{$level}_{$parentKode}_{$tahun}_{$limit}_{$specificId}_{$month}";
-        
-        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $tahun, $limit, $specificId, $month) {
-            
+        $cacheKey = "monthly_chart_{$level}_{$parentKode}_{$tahun}_{$limit}_{$specificId}_{$month}_{$years}";
+
+        return Cache::remember($cacheKey, $this->cacheTime, function () use ($level, $parentKode, $tahun, $limit, $specificId, $month, $years) {
+
             // Initialize parent variable
             $parent = null;
             if ($parentKode && is_numeric($parentKode)) {
                 $parent = KodeRekening::find($parentKode);
             }
-            
+
             // SPECIAL HANDLING: If month filter is applied, show year-over-year comparison
             if ($month !== null) {
-                // Determine years range for comparison
+                // Determine years range for comparison — respect the $years parameter
                 $currentYear = date('Y');
-                $startYear = $currentYear - 2; // 3 years comparison by default
+                $startYear = $currentYear - $years + 1;
                 
                 // Build categories (years)
                 $categories = [];
@@ -578,9 +584,9 @@ class TrendAnalysisService
     /**
      * Alias method for backward compatibility
      */
-    public function getMonthlyChartDataOptimized($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null)
+    public function getMonthlyChartDataOptimized($level, $parentKode, $tahun, $limit = 10, $specificId = null, $month = null, $years = 3)
     {
-        return $this->getMonthlyChartData($level, $parentKode, $tahun, $limit, $specificId, $month);
+        return $this->getMonthlyChartData($level, $parentKode, $tahun, $limit, $specificId, $month, $years);
     }
 
     /**
@@ -875,7 +881,7 @@ class TrendAnalysisService
         return KodeRekening::where('nama', 'LIKE', "%{$query}%")
             ->orWhere('kode', 'LIKE', "%{$query}%")
             ->where('is_active', true)
-            ->select('id', 'kode', 'nama', 'level')
+            ->select('id', 'kode', 'nama', 'level', 'berlaku_mulai')
             ->orderBy('level')
             ->orderBy('kode')
             ->limit($limit)

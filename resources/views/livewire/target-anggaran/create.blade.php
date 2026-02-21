@@ -122,32 +122,102 @@
                     </div>
                 </div>
                 
-                <div class="mb-3">
-                    <label for="kodeRekeningId" class="form-label">Kode Rekening Level 6 <span class="text-danger">*</span></label>
-                    <select class="form-select @error('kodeRekeningId') is-invalid @enderror" 
-                        id="kodeRekeningId" wire:model.live="kodeRekeningId">
-                        <option value="">Pilih Kode Rekening Level 6</option>
-                        @foreach($kodeRekening as $kr)
-                            <option value="{{ $kr->id }}">{{ $kr->kode }} - {{ $kr->nama }}</option>
-                        @endforeach
-                    </select>
-                    @error('kodeRekeningId')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                    <div class="form-text">
-                        <i class="bx bx-list-ol"></i> Hanya kode rekening <strong>Level 6</strong> (sub rincian objek) yang dapat diinput manual
-                    </div>
-                    
-                    @if($kodeRekening->isEmpty())
-                        <div class="alert alert-warning mt-2 py-2">
-                            <i class="bx bx-error"></i> 
-                            @if($showSkpdDropdown && !$selectedSkpdId)
-                                Silakan pilih SKPD terlebih dahulu untuk melihat kode rekening yang tersedia.
-                            @else
-                                Tidak ada kode rekening Level 6 yang tersedia untuk SKPD ini. Hubungi administrator untuk assignment.
-                            @endif
+                <div class="mb-3" x-data="{
+                    open: false,
+                    search: '',
+                    selectedId: @entangle('kodeRekeningId'),
+                    items: @js($kodeRekening->map(fn($kr) => ['id' => $kr->id, 'kode' => $kr->kode, 'nama' => $kr->nama])->values()->toArray()),
+                    get filtered() {
+                        if (!this.search) return this.items;
+                        const s = this.search.toLowerCase();
+                        return this.items.filter(i => i.kode.toLowerCase().includes(s) || i.nama.toLowerCase().includes(s));
+                    },
+                    get selectedLabel() {
+                        const item = this.items.find(i => i.id == this.selectedId);
+                        return item ? item.kode + ' - ' + item.nama : '';
+                    },
+                    select(item) {
+                        this.selectedId = item.id;
+                        this.search = '';
+                        this.open = false;
+                    },
+                    clear() {
+                        this.selectedId = '';
+                        this.search = '';
+                        this.$refs.searchInput.focus();
+                    }
+                }" @click.outside="open = false" @keydown.escape.window="open = false">
+                    <label class="form-label fw-bold">
+                        <i class="bx bx-list-ol"></i> Kode Rekening Level 6 <span class="text-danger">*</span>
+                    </label>
+
+                    <div class="position-relative">
+                        <div class="form-control d-flex align-items-center @error('kodeRekeningId') is-invalid @enderror"
+                             style="min-height: 38px; cursor: pointer;"
+                             @click="open = !open; $nextTick(() => { if(open) $refs.searchInput.focus() })">
+                            <template x-if="!open && selectedId">
+                                <div class="d-flex align-items-center justify-content-between w-100">
+                                    <span class="text-truncate" x-text="selectedLabel"></span>
+                                    <button type="button" class="btn-close btn-close-sm ms-2"
+                                            style="font-size: 0.6rem;"
+                                            @click.stop="clear()" title="Hapus pilihan"></button>
+                                </div>
+                            </template>
+                            <template x-if="!open && !selectedId">
+                                <span class="text-muted">Ketik kode atau nama rekening...</span>
+                            </template>
+                            <template x-if="open">
+                                <input type="text"
+                                       x-ref="searchInput"
+                                       x-model="search"
+                                       class="border-0 w-100 p-0"
+                                       style="outline: none; box-shadow: none;"
+                                       placeholder="Ketik kode atau nama rekening..."
+                                       @keydown.tab="open = false"
+                                       @click.stop>
+                            </template>
                         </div>
-                    @endif
+
+                        @error('kodeRekeningId')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+
+                        <div x-show="open" x-transition.opacity
+                             class="position-absolute w-100 bg-white border rounded-bottom shadow-lg"
+                             style="z-index: 1050; max-height: 280px; overflow-y: auto; top: 100%; left: 0;">
+                            <template x-if="filtered.length === 0">
+                                <div class="px-3 py-2 text-muted small">
+                                    <i class="bx bx-search-alt"></i> Tidak ditemukan
+                                </div>
+                            </template>
+                            <template x-for="item in filtered" :key="item.id">
+                                <div class="px-3 py-2 border-bottom"
+                                     style="cursor: pointer; font-size: 0.875rem;"
+                                     :class="{ 'bg-primary text-white': item.id == selectedId, 'hover-bg': item.id != selectedId }"
+                                     @click="select(item)">
+                                    <span class="fw-semibold" x-text="item.kode"></span>
+                                    <span class="ms-1" :class="item.id == selectedId ? 'text-white' : 'text-muted'">-</span>
+                                    <span class="ms-1" x-text="item.nama"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="form-text">
+                        @if($kodeRekening->isNotEmpty())
+                            <i class="bx bx-check-circle text-success"></i>
+                            {{ $kodeRekening->count() }} kode rekening tersedia — hanya <strong>Level 6</strong> (sub rincian objek)
+                        @else
+                            <i class="bx bx-error-circle text-warning"></i>
+                            @if($showSkpdDropdown && !$selectedSkpdId)
+                                Pilih SKPD terlebih dahulu untuk melihat kode rekening yang tersedia.
+                            @else
+                                Tidak ada kode rekening Level 6 untuk SKPD ini. Hubungi administrator.
+                            @endif
+                        @endif
+                    </div>
+
+                    <style>.hover-bg:hover { background-color: #f0f4ff; }</style>
                 </div>
                 
                 {{-- Tampilkan hierarki path jika kode rekening dipilih --}}
