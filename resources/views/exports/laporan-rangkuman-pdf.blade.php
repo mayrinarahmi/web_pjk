@@ -8,32 +8,28 @@
 
         body {
             font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 8.5pt;
+            font-size: 7pt;
             color: #1a1a1a;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
-
         .header h2 {
-            font-size: 12pt;
+            font-size: 10pt;
             font-weight: bold;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
-
-        .header p {
-            font-size: 9pt;
+        .header .sub {
+            font-size: 8pt;
             margin-top: 2px;
-            color: #444;
+            color: #333;
         }
-
         .header .cetak {
-            font-size: 7.5pt;
+            font-size: 6.5pt;
             color: #888;
-            margin-top: 4px;
+            margin-top: 2px;
             font-style: italic;
         }
 
@@ -47,27 +43,32 @@
             font-weight: bold;
             text-align: center;
             vertical-align: middle;
-            padding: 4px 3px;
-            border: 0.5pt solid #888;
-            word-wrap: break-word;
+            padding: 3px 2px;
+            border: 0.5pt solid #777;
+            font-size: 6.5pt;
+            overflow: hidden;
         }
 
         tbody td {
-            padding: 3px 4px;
+            padding: 2px 3px;
             border: 0.5pt solid #bbb;
             vertical-align: middle;
+            font-size: 6.5pt;
+            overflow: hidden;
         }
 
         tfoot td {
-            padding: 4px;
+            padding: 3px 3px;
             border: 0.5pt solid #888;
             font-weight: bold;
-            text-align: center;
+            font-size: 6.5pt;
+            overflow: hidden;
         }
 
-        .text-right  { text-align: right; }
+        .text-right  { text-align: right; white-space: nowrap; }
         .text-center { text-align: center; }
         .text-left   { text-align: left; }
+        .wrap        { word-wrap: break-word; }
 
         /* Warna header per tahun */
         .h-blue   { background-color: #4472C4; color: #fff; }
@@ -78,17 +79,14 @@
         .h-teal   { background-color: #00B0A0; color: #fff; }
         .h-main   { background-color: #4472C4; color: #fff; }
 
-        .row-even { background-color: #F2F7FD; }
+        .row-even  { background-color: #F2F7FD; }
         .row-total { background-color: #BDD7EE; font-weight: bold; }
-
-        .no-col    { width: 28px; }
-        .nama-col  { width: 160px; }
     </style>
 </head>
 <body>
     <div class="header">
         <h2>Laporan Ringkasan Penerimaan Daerah</h2>
-        <p>
+        <p class="sub">
             @if($tahunMulai == $tahunSelesai)
                 Tahun {{ $tahunMulai }}
             @else
@@ -101,32 +99,41 @@
     @php
         $yearColors = ['h-blue', 'h-green', 'h-orange', 'h-purple', 'h-red', 'h-teal'];
         $numYears   = count($years);
-        // Hitung lebar kolom angka (dalam %, sisakan untuk NO dan Nama)
-        $fixedWidth = 28 + 160; // px equiv, bukan persen
-        // Persentase untuk kolom angka
-        $namaColPct  = 25;
-        $noColPct    = 4;
-        $remainPct   = 100 - $namaColPct - $noColPct;
-        $colPerYear  = $remainPct / max($numYears, 1);
-        $targetColPct    = $colPerYear * 0.38;
-        $realisasiColPct = $colPerYear * 0.38;
-        $persenColPct    = $colPerYear * 0.24;
+
+        // Hitung lebar kolom dinamis berdasarkan jumlah tahun
+        // Total lebar usable landscape A4 ≈ 100%
+        $noColPct = 3;
+
+        // Lebar Unit Kerja makin kecil jika tahun makin banyak
+        if ($numYears <= 1)      $ukPct = 28;
+        elseif ($numYears <= 2)  $ukPct = 23;
+        elseif ($numYears <= 3)  $ukPct = 19;
+        elseif ($numYears <= 4)  $ukPct = 16;
+        else                     $ukPct = 13;
+
+        $remainPct      = 100 - $noColPct - $ukPct;
+        $perYearPct     = $remainPct / $numYears;
+        // Target & Realisasi lebih lebar, % lebih sempit
+        $targetPct      = round($perYearPct * 0.37, 2);
+        $realisasiPct   = round($perYearPct * 0.37, 2);
+        $persenPct      = round($perYearPct * 0.26, 2);
     @endphp
 
     <table>
         <colgroup>
             <col style="width: {{ $noColPct }}%">
-            <col style="width: {{ $namaColPct }}%">
+            <col style="width: {{ $ukPct }}%">
             @foreach($years as $year)
-                <col style="width: {{ $targetColPct }}%">
-                <col style="width: {{ $realisasiColPct }}%">
-                <col style="width: {{ $persenColPct }}%">
+                <col style="width: {{ $targetPct }}%">
+                <col style="width: {{ $realisasiPct }}%">
+                <col style="width: {{ $persenPct }}%">
             @endforeach
         </colgroup>
+
         <thead>
             {{-- Baris 1: NO | Unit Kerja | [Tahun colspan=3] --}}
             <tr>
-                <th rowspan="2" class="h-main no-col">NO</th>
+                <th rowspan="2" class="h-main">NO</th>
                 <th rowspan="2" class="h-main">Unit Kerja</th>
                 @foreach($years as $i => $year)
                     @php $cls = $yearColors[$i % count($yearColors)]; @endphp
@@ -143,11 +150,12 @@
                 @endforeach
             </tr>
         </thead>
+
         <tbody>
             @forelse($rows as $no => $row)
                 <tr class="{{ $no % 2 === 1 ? 'row-even' : '' }}">
                     <td class="text-center">{{ $no + 1 }}</td>
-                    <td class="text-left">{{ $row['nama'] }}</td>
+                    <td class="wrap">{{ $row['nama'] }}</td>
                     @foreach($years as $year)
                         @php
                             $d = $row['per_tahun'][$year] ?? ['target'=>0,'realisasi'=>0,'persen'=>0];
@@ -165,12 +173,13 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ 2 + $numYears * 3 }}" class="text-center" style="padding: 10px;">
+                    <td colspan="{{ 2 + $numYears * 3 }}" class="text-center" style="padding: 8px;">
                         Tidak ada data
                     </td>
                 </tr>
             @endforelse
         </tbody>
+
         <tfoot>
             <tr class="row-total">
                 <td colspan="2" class="text-center">TOTAL PAD SELURUHNYA</td>
