@@ -4,8 +4,8 @@ namespace App\Http\Livewire\LaporanRangkuman;
 
 use Livewire\Component;
 use App\Models\Penerimaan;
+use App\Models\KodeRekening;
 use App\Models\Skpd;
-use App\Models\TargetAnggaran;
 use App\Models\TahunAnggaran;
 use App\Exports\LaporanRangkumanExport;
 use Maatwebsite\Excel\Facades\Excel;
@@ -74,8 +74,15 @@ class Index extends Component
             $years = array_slice($years, 0, 10);
         }
 
-        // Load semua SKPD aktif
+        // Root kode rekening pendapatan (kode '4') — sama seperti dashboard
+        $rootKodeRekening = KodeRekening::where('level', 1)
+            ->where('kode', '4')
+            ->first();
+
+        // Load semua SKPD aktif yang punya assignment kode rekening
         $skpds = Skpd::where('status', 'aktif')
+            ->whereNotNull('kode_rekening_access')
+            ->where('kode_rekening_access', '!=', '[]')
             ->orderBy('nama_opd')
             ->get();
 
@@ -95,7 +102,6 @@ class Index extends Component
         $totals = array_fill_keys($years, ['target' => 0, 'realisasi' => 0]);
 
         foreach ($skpds as $skpd) {
-            $level6Ids = $skpd->getLevel6KodeRekeningIds();
             $row = [
                 'nama' => $skpd->nama_opd,
                 'per_tahun' => [],
@@ -105,15 +111,14 @@ class Index extends Component
                 $ta = $tahunAnggaranCache[$year];
                 $tahunAnggaranId = $ta ? $ta->id : null;
 
-                // Target: sum TargetAnggaran untuk kode rekening SKPD
+                // TARGET: gunakan method yang sama dengan dashboard
+                // getTargetAnggaranForTahun() → calculateHierarchiTarget() dengan filter skpd_id
                 $target = 0;
-                if ($tahunAnggaranId && !empty($level6Ids)) {
-                    $target = TargetAnggaran::whereIn('kode_rekening_id', $level6Ids)
-                        ->where('tahun_anggaran_id', $tahunAnggaranId)
-                        ->sum('jumlah');
+                if ($rootKodeRekening && $tahunAnggaranId) {
+                    $target = $rootKodeRekening->getTargetAnggaranForTahun($tahunAnggaranId, $skpd->id);
                 }
 
-                // Realisasi: sum penerimaan SKPD di tahun tersebut
+                // REALISASI: sum penerimaan SKPD di tahun tersebut (sama dengan dashboard)
                 $realisasi = Penerimaan::where('skpd_id', $skpd->id)
                     ->where('tahun', $year)
                     ->sum('jumlah');
