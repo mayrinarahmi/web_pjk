@@ -27,6 +27,7 @@ use App\Http\Livewire\Penerimaan\Index as PenerimaanIndex;
 use App\Http\Livewire\Penerimaan\Create as PenerimaanCreate;
 use App\Http\Livewire\Penerimaan\Edit as PenerimaanEdit;
 use App\Http\Livewire\Laporan\Index as LaporanIndex;
+use App\Http\Livewire\LaporanRangkuman\Index as LaporanRangkumanIndex;
 use App\Http\Livewire\User\Index as UserIndex;
 use App\Http\Livewire\User\Create as UserCreate;
 use App\Http\Livewire\User\Edit as UserEdit;
@@ -152,6 +153,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/laporan/realisasi/export-excel', [LaporanRealisasiController::class, 'exportExcel'])->name('laporan.realisasi.export.excel');
         Route::get('/laporan/realisasi/export-pdf', [LaporanRealisasiController::class, 'exportPDF'])->name('laporan.realisasi.export.pdf');
     });
+
+    // Laporan Ringkasan - Super Admin & Kepala Badan only
+    Route::get('/laporan/ringkasan', LaporanRangkumanIndex::class)
+        ->name('laporan.ringkasan')
+        ->middleware('role:Super Admin|Kepala Badan');
 
     // ====================================
     // MASTER DATA ROUTES

@@ -106,19 +106,18 @@
         </li>
         @endcan
 
-        <!-- Laporan - Semua user bisa akses -->
-        @can('view-laporan')
-        <!-- <li class="menu-header small text-uppercase">
+        <!-- Laporan - Hanya Super Admin & Kepala Badan, TIDAK untuk Operator SKPD -->
+        @if(auth()->user()->hasRole(['Super Admin', 'Kepala Badan']))
+        <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Laporan</span>
         </li>
-        
-        <li class="menu-item {{ request()->routeIs('laporan.*') ? 'active' : '' }}">
-            <a href="{{ route('laporan.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-file"></i>
-                <div>Laporan Realisasi</div>
+        <li class="menu-item {{ request()->routeIs('laporan.ringkasan') ? 'active' : '' }}">
+            <a href="{{ route('laporan.ringkasan') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-bar-chart-alt-2"></i>
+                <div>Ringkasan</div>
             </a>
-        </li> -->
-        @endcan
+        </li>
+        @endif
 
         <!-- Pengaturan - Hanya Super Admin dan Operator (backward compatibility) -->
         @if(auth()->user()->hasRole(['Super Admin', 'Administrator', 'Operator']))
