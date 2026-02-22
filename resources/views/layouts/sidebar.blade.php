@@ -106,8 +106,8 @@
         </li>
         @endcan
 
-        <!-- Laporan - Hanya Super Admin & Kepala Badan, TIDAK untuk Operator SKPD -->
-        @if(auth()->user()->hasRole(['Super Admin', 'Kepala Badan']))
+        <!-- Laporan - Hanya Super Admin, Administrator & Kepala Badan, TIDAK untuk Operator SKPD -->
+        @if(auth()->user()->hasRole(['Super Admin', 'Administrator', 'Kepala Badan']))
         <li class="menu-header small text-uppercase">
             <span class="menu-header-text">Laporan</span>
         </li>

@@ -25,7 +25,7 @@ class Index extends Component
 
     public function mount()
     {
-        if (!auth()->user()->hasRole(['Super Admin', 'Kepala Badan'])) {
+        if (!auth()->user()->hasRole(['Super Admin', 'Administrator', 'Kepala Badan'])) {
             abort(403);
         }
 

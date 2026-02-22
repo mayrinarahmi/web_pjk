@@ -154,10 +154,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/laporan/realisasi/export-pdf', [LaporanRealisasiController::class, 'exportPDF'])->name('laporan.realisasi.export.pdf');
     });
 
-    // Laporan Ringkasan - Super Admin & Kepala Badan only
+    // Laporan Ringkasan - Super Admin, Administrator & Kepala Badan only
     Route::get('/laporan/ringkasan', LaporanRangkumanIndex::class)
         ->name('laporan.ringkasan')
-        ->middleware('role:Super Admin|Kepala Badan');
+        ->middleware('role:Super Admin|Administrator|Kepala Badan');
 
     // ====================================
     // MASTER DATA ROUTES
