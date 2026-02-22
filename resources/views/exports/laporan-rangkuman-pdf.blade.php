@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <title>Laporan Ringkasan Penerimaan Daerah</title>
     <style>
+        @page {
+            margin: 12mm 16mm 12mm 16mm; /* atas kanan bawah kiri */
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
@@ -20,6 +24,7 @@
             font-size: 10pt;
             font-weight: bold;
             text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
         .header .sub {
             font-size: 8pt;
@@ -43,14 +48,14 @@
             font-weight: bold;
             text-align: center;
             vertical-align: middle;
-            padding: 3px 2px;
+            padding: 3px 3px;
             border: 0.5pt solid #777;
             font-size: 6.5pt;
             overflow: hidden;
         }
 
         tbody td {
-            padding: 2px 3px;
+            padding: 2px 4px;
             border: 0.5pt solid #bbb;
             vertical-align: middle;
             font-size: 6.5pt;
@@ -58,7 +63,7 @@
         }
 
         tfoot td {
-            padding: 3px 3px;
+            padding: 3px 4px;
             border: 0.5pt solid #888;
             font-weight: bold;
             font-size: 6.5pt;
@@ -100,23 +105,26 @@
         $yearColors = ['h-blue', 'h-green', 'h-orange', 'h-purple', 'h-red', 'h-teal'];
         $numYears   = count($years);
 
-        // Hitung lebar kolom dinamis berdasarkan jumlah tahun
-        // Total lebar usable landscape A4 ≈ 100%
-        $noColPct = 3;
+        /*
+         * Lebar kolom (dalam persen dari total lebar usable):
+         *  - NO       : kecil saja, cukup untuk 2 digit
+         *  - Unit Kerja: cukup lebar agar nama tidak terlalu terpotong
+         *  - Per tahun: Target & Realisasi lebih lebar, % sempit
+         */
+        $noColPct = 3.5;
 
-        // Lebar Unit Kerja makin kecil jika tahun makin banyak
-        if ($numYears <= 1)      $ukPct = 28;
-        elseif ($numYears <= 2)  $ukPct = 23;
-        elseif ($numYears <= 3)  $ukPct = 19;
-        elseif ($numYears <= 4)  $ukPct = 16;
-        else                     $ukPct = 13;
+        if ($numYears <= 1)      $ukPct = 30;
+        elseif ($numYears <= 2)  $ukPct = 24;
+        elseif ($numYears <= 3)  $ukPct = 20;
+        elseif ($numYears <= 4)  $ukPct = 17;
+        else                     $ukPct = 14;
 
-        $remainPct      = 100 - $noColPct - $ukPct;
-        $perYearPct     = $remainPct / $numYears;
-        // Target & Realisasi lebih lebar, % lebih sempit
-        $targetPct      = round($perYearPct * 0.37, 2);
-        $realisasiPct   = round($perYearPct * 0.37, 2);
-        $persenPct      = round($perYearPct * 0.26, 2);
+        $remainPct    = 100 - $noColPct - $ukPct;
+        $perYearPct   = $remainPct / $numYears;
+        // Target 39%, Realisasi 39%, % 22% dari perYearPct
+        $targetPct    = round($perYearPct * 0.39, 2);
+        $realisasiPct = round($perYearPct * 0.39, 2);
+        $persenPct    = round($perYearPct * 0.22, 2);
     @endphp
 
     <table>
@@ -133,14 +141,14 @@
         <thead>
             {{-- Baris 1: NO | Unit Kerja | [Tahun colspan=3] --}}
             <tr>
-                <th rowspan="2" class="h-main">NO</th>
-                <th rowspan="2" class="h-main">Unit Kerja</th>
+                <th rowspan="2" class="h-main" style="width:{{ $noColPct }}%">NO</th>
+                <th rowspan="2" class="h-main" style="width:{{ $ukPct }}%">Unit Kerja</th>
                 @foreach($years as $i => $year)
                     @php $cls = $yearColors[$i % count($yearColors)]; @endphp
                     <th colspan="3" class="{{ $cls }}">{{ $year }}</th>
                 @endforeach
             </tr>
-            {{-- Baris 2: Target | Realisasi | % per tahun --}}
+            {{-- Baris 2: Target | Realisasi | % --}}
             <tr>
                 @foreach($years as $i => $year)
                     @php $cls = $yearColors[$i % count($yearColors)]; @endphp
