@@ -5,7 +5,7 @@
     <title>Laporan Ringkasan Penerimaan Daerah</title>
     <style>
         @page {
-            margin: 12mm 16mm 12mm 16mm;
+            margin: 14mm 18mm 14mm 18mm;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -17,7 +17,7 @@
 
         .header {
             text-align: center;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         .header h2 {
             font-size: 10pt;
@@ -37,42 +37,45 @@
             font-style: italic;
         }
 
+        /* Tabel di tengah, lebar menyesuaikan konten */
+        .table-wrap {
+            text-align: center;
+        }
+
         table {
-            width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
+            margin: 0 auto;
         }
 
         thead th {
             font-weight: bold;
             text-align: center;
             vertical-align: middle;
-            padding: 3px 3px;
+            padding: 4px 5px;
             border: 0.5pt solid #777;
             font-size: 6.5pt;
-            overflow: hidden;
+            white-space: nowrap;
         }
 
         tbody td {
-            padding: 2px 4px;
+            padding: 3px 5px;
             border: 0.5pt solid #bbb;
             vertical-align: middle;
             font-size: 6.5pt;
-            overflow: hidden;
         }
 
         tfoot td {
-            padding: 3px 4px;
+            padding: 4px 5px;
             border: 0.5pt solid #888;
             font-weight: bold;
             font-size: 6.5pt;
-            overflow: hidden;
         }
 
         .text-right  { text-align: right; white-space: nowrap; }
-        .text-center { text-align: center; }
+        .text-center { text-align: center; white-space: nowrap; }
         .text-left   { text-align: left; }
-        .wrap        { word-wrap: break-word; }
+        .wrap        { word-wrap: break-word; text-align: left; }
 
         .h-blue   { background-color: #4472C4; color: #fff; }
         .h-green  { background-color: #70AD47; color: #fff; }
@@ -101,34 +104,39 @@
 </div>
 
 @php
-    $yearColors  = ['h-blue','h-green','h-orange','h-purple','h-red','h-teal'];
-    $numYears    = count($years);
+    $yearColors = ['h-blue','h-green','h-orange','h-purple','h-red','h-teal'];
+    $numYears   = count($years);
 
     /*
-     * Lebar kolom dalam mm (landscape A4 = 297mm, margin 16mm×2 → usable 265mm)
-     * NO     : tetap 8mm
-     * Target/Realisasi/% : dikecilkan sesuai jumlah tahun
-     * Unit Kerja : sisa dari total usable
+     * Landscape A4: 297mm, margin 18mm×2 → usable 261mm
+     *
+     * Kolom angka dihitung cukup untuk angka terpanjang ~16 karakter
+     * (mis. "2.429.556.718.338") + padding.
+     * % cukup untuk "107,08%".
+     * NO cukup untuk "10".
+     * Unit Kerja: sisa atau minimal 40mm.
      */
-    $noMm = 8;
+    $noMm = 9;
 
-    if ($numYears <= 1) {
-        $tMm = 52; $rMm = 52; $pMm = 14;
-    } elseif ($numYears <= 2) {
-        $tMm = 37; $rMm = 37; $pMm = 13;
-    } elseif ($numYears <= 3) {
-        $tMm = 28; $rMm = 28; $pMm = 11;
-    } elseif ($numYears <= 4) {
-        $tMm = 22; $rMm = 22; $pMm = 9;
-    } else {
-        $tMm = 18; $rMm = 18; $pMm = 8;
-    }
+    // Lebar data kolom per tahun (Target, Realisasi, %)
+    if ($numYears <= 1)     { $tMm = 33; $rMm = 33; $pMm = 14; }
+    elseif ($numYears <= 2) { $tMm = 30; $rMm = 30; $pMm = 13; }
+    elseif ($numYears <= 3) { $tMm = 26; $rMm = 26; $pMm = 11; }
+    elseif ($numYears <= 4) { $tMm = 22; $rMm = 22; $pMm = 10; }
+    else                    { $tMm = 19; $rMm = 19; $pMm = 9;  }
 
     $dataColsMm = $numYears * ($tMm + $rMm + $pMm);
-    $ukMm       = max(28, 265 - $noMm - $dataColsMm);
+
+    // Sisakan ruang untuk Unit Kerja minimal 38mm
+    $usable = 261;
+    $ukMm   = max(38, $usable - $noMm - $dataColsMm);
+
+    // Total lebar tabel
+    $tableMm = $noMm + $ukMm + $dataColsMm;
 @endphp
 
-<table>
+<div class="table-wrap">
+<table style="width: {{ $tableMm }}mm">
     <colgroup>
         <col style="width: {{ $noMm }}mm">
         <col style="width: {{ $ukMm }}mm">
@@ -142,7 +150,7 @@
     <thead>
         <tr>
             <th rowspan="2" class="h-main">NO</th>
-            <th rowspan="2" class="h-main">Unit Kerja</th>
+            <th rowspan="2" class="h-main" style="text-align:center">Unit Kerja</th>
             @foreach($years as $i => $year)
                 @php $cls = $yearColors[$i % count($yearColors)]; @endphp
                 <th colspan="3" class="{{ $cls }}">{{ $year }}</th>
@@ -170,14 +178,15 @@
                     <td class="text-right">
                         @if($d['target'] > 0)
                             {{ number_format($d['persen'], 2, ',', '.') }}%
-                        @else -
+                        @else
+                            -
                         @endif
                     </td>
                 @endforeach
             </tr>
         @empty
             <tr>
-                <td colspan="{{ 2 + $numYears * 3 }}" class="text-center" style="padding:8px">
+                <td colspan="{{ 2 + $numYears * 3 }}" class="text-center" style="padding:10px">
                     Tidak ada data
                 </td>
             </tr>
@@ -194,13 +203,15 @@
                 <td class="text-right">
                     @if($d['target'] > 0)
                         {{ number_format($d['persen'], 2, ',', '.') }}%
-                    @else -
+                    @else
+                        -
                     @endif
                 </td>
             @endforeach
         </tr>
     </tfoot>
 </table>
+</div>
 
 </body>
 </html>
