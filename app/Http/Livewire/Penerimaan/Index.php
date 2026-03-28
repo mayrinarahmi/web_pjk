@@ -559,7 +559,15 @@ private function getHierarchicalKodeRekeningIds($level6Ids)
 
 public function delete($id)
 {
-    // ... existing code ...
+    if (!auth()->user()->can('delete-penerimaan')) {
+        session()->flash('error', 'Anda tidak memiliki izin untuk menghapus data.');
+        return;
+    }
+
+    $penerimaan = Penerimaan::findOrFail($id);
+    $penerimaan->delete();
+
+    session()->flash('message', 'Data penerimaan berhasil dihapus.');
 }
 
 // ========================================
@@ -692,8 +700,18 @@ public function deleteAllPenerimaan()
     
     public function downloadTemplate()
     {
-        return response()->download(
-            public_path('templates/template_penerimaan.xlsx'), 
+        // Baris header + 5 baris kosong
+        $rows = [
+            ['kode', 'uraian', 'tanggal', 'jumlah'],
+            ['', '', '', ''],
+            ['', '', '', ''],
+            ['', '', '', ''],
+            ['', '', '', ''],
+            ['', '', '', ''],
+        ];
+
+        return Excel::download(
+            new \App\Exports\PenerimaanTemplateExport($rows),
             'template_penerimaan.xlsx'
         );
     }
@@ -714,7 +732,9 @@ public function deleteAllPenerimaan()
             $filename = 'import_penerimaan_' . now()->format('YmdHis') . '.' . $this->importFile->extension();
             $path = $this->importFile->storeAs('temp', $filename);
             
-            $import = new PenerimaanImport($this->importTahun, auth()->user()->skpd_id, auth()->id());
+            $user = auth()->user();
+            $skpdId = $user->hasRole('Operator SKPD') ? $user->skpd_id : $this->selectedSkpdId;
+            $import = new PenerimaanImport($this->importTahun, $skpdId, $user->id);
             Excel::import($import, $path);
             
             $processedCount = $import->getProcessedCount();
@@ -725,7 +745,13 @@ public function deleteAllPenerimaan()
             if ($processedCount > 0) {
                 session()->flash('message', "Import berhasil! {$processedCount} data berhasil diimport, {$skippedCount} data dilewati.");
                 $this->closeImportModal();
-                $this->dispatch('$refresh');
+                // Reset tanggal ke full year agar data import langsung terlihat
+                $this->tahun = $this->importTahun;
+                $this->tanggalMulai = $this->importTahun . '-01-01';
+                $this->tanggalSelesai = $this->importTahun . '-12-31';
+                $this->displayTanggalMulai = $this->tanggalMulai;
+                $this->displayTanggalSelesai = $this->tanggalSelesai;
+                $this->hideEmpty = true;
             } else {
                 session()->flash('error', 'Tidak ada data yang berhasil diimport. Periksa format file.');
             }
@@ -763,19 +789,17 @@ public function deleteAllPenerimaan()
         if ($user->canViewAllSkpd()) {
             // Super Admin / Kepala Badan
             if ($this->selectedSkpdId) {
-                // Ada SKPD yang dipilih - filter by SKPD
                 $selectedSkpd = Skpd::find($this->selectedSkpdId);
                 if ($selectedSkpd) {
-                    $allowedKodeIds = $selectedSkpd->getHierarchicalKodeRekeningIds();
+                    $allowedKodeIds   = $selectedSkpd->getHierarchicalKodeRekeningIds();
                     $level6AllowedIds = $selectedSkpd->getLevel6KodeRekeningIds();
                 }
             }
-            // Jika tidak ada SKPD dipilih, allowedKodeIds tetap empty = no restriction
-            
+
         } else {
             // Operator SKPD - hanya kode yang di-assign
             if ($user->skpd_id && $user->skpd) {
-                $allowedKodeIds = $user->skpd->getHierarchicalKodeRekeningIds();
+                $allowedKodeIds   = $user->skpd->getHierarchicalKodeRekeningIds();
                 $level6AllowedIds = $user->skpd->getLevel6KodeRekeningIds();
             }
         }
@@ -824,7 +848,7 @@ public function deleteAllPenerimaan()
         // ========================================
         foreach ($allKodeRekening as $kode) {
             $penerimaanQuery = Penerimaan::query();
-            
+
             if ($kode->level == 6) {
                 // Level 6 - direct match
                 $penerimaanQuery->where('kode_rekening_id', $kode->id);

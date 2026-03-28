@@ -5,7 +5,7 @@
     <title>Laporan Ringkasan Penerimaan Daerah</title>
     <style>
         @page {
-            margin: 14mm 18mm 14mm 18mm;
+            margin: 14mm 22mm 14mm 22mm;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -37,15 +37,9 @@
             font-style: italic;
         }
 
-        /* Tabel di tengah, lebar menyesuaikan konten */
-        .table-wrap {
-            text-align: center;
-        }
-
         table {
             border-collapse: collapse;
-            table-layout: fixed;
-            margin: 0 auto;
+            width: 100%;
         }
 
         thead th {
@@ -106,47 +100,9 @@
 @php
     $yearColors = ['h-blue','h-green','h-orange','h-purple','h-red','h-teal'];
     $numYears   = count($years);
-
-    /*
-     * Landscape A4: 297mm, margin 18mm×2 → usable 261mm
-     *
-     * Kolom angka dihitung cukup untuk angka terpanjang ~16 karakter
-     * (mis. "2.429.556.718.338") + padding.
-     * % cukup untuk "107,08%".
-     * NO cukup untuk "10".
-     * Unit Kerja: sisa atau minimal 40mm.
-     */
-    $noMm = 9;
-
-    // Lebar data kolom per tahun (Target, Realisasi, %)
-    if ($numYears <= 1)     { $tMm = 33; $rMm = 33; $pMm = 14; }
-    elseif ($numYears <= 2) { $tMm = 30; $rMm = 30; $pMm = 13; }
-    elseif ($numYears <= 3) { $tMm = 26; $rMm = 26; $pMm = 11; }
-    elseif ($numYears <= 4) { $tMm = 22; $rMm = 22; $pMm = 10; }
-    else                    { $tMm = 19; $rMm = 19; $pMm = 9;  }
-
-    $dataColsMm = $numYears * ($tMm + $rMm + $pMm);
-
-    // Sisakan ruang untuk Unit Kerja minimal 38mm
-    $usable = 261;
-    $ukMm   = max(38, $usable - $noMm - $dataColsMm);
-
-    // Total lebar tabel
-    $tableMm = $noMm + $ukMm + $dataColsMm;
 @endphp
 
-<div class="table-wrap">
-<table style="width: {{ $tableMm }}mm">
-    <colgroup>
-        <col style="width: {{ $noMm }}mm">
-        <col style="width: {{ $ukMm }}mm">
-        @foreach($years as $year)
-            <col style="width: {{ $tMm }}mm">
-            <col style="width: {{ $rMm }}mm">
-            <col style="width: {{ $pMm }}mm">
-        @endforeach
-    </colgroup>
-
+<table>
     <thead>
         <tr>
             <th rowspan="2" class="h-main">NO</th>
@@ -211,7 +167,6 @@
         </tr>
     </tfoot>
 </table>
-</div>
 
 </body>
 </html>

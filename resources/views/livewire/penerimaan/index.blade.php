@@ -465,7 +465,7 @@
                             <hr>
                             <ul class="mb-0">
                                 <li>Download template Excel terlebih dahulu</li>
-                                <li>Kolom yang wajib diisi: <strong>kode</strong>, <strong>tanggal</strong>, <strong>jumlah</strong></li>
+                                <li>Kolom yang wajib diisi: <strong>kode</strong>, <strong>tanggal</strong>, <strong>jumlah</strong> (kolom <strong>uraian</strong> opsional)</li>
                                 <li>Format tanggal: <code>DD-MM-YYYY</code> atau <code>DD/MM/YYYY</code></li>
                                 <li>Tanggal harus sesuai dengan tahun yang dipilih ({{ $importTahun ?: '...' }})</li>
                                 <li>Kode rekening harus level 6 dan sudah terdaftar di sistem</li>
@@ -482,9 +482,9 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th>kode</th>
+                                            <th>uraian</th>
                                             <th>tanggal</th>
                                             <th>jumlah</th>
-                                            <th>keterangan</th>
                                         </tr>
                                     </thead>
                                     <tbody>

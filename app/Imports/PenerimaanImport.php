@@ -42,9 +42,12 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             if (empty($row['kode']) || empty($row['tanggal']) || empty($row['jumlah'])) {
                 return null;
             }
-            
+
+            // Ambil hanya bagian kode (sebelum " - "), untuk handle format "kode - uraian"
+            $kode = trim(explode(' - ', $row['kode'])[0]);
+
             // Cari kode rekening berdasarkan kode (filter by tahun berlaku)
-            $kodeQuery = KodeRekening::where('kode', $row['kode'])
+            $kodeQuery = KodeRekening::where('kode', $kode)
                 ->where('is_active', true);
 
             if ($this->tahun) {
@@ -54,14 +57,14 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             $kodeRekening = $kodeQuery->first();
             
             if (!$kodeRekening) {
-                Log::warning("Kode rekening '{$row['kode']}' tidak ditemukan");
+                Log::warning("Kode rekening '{$kode}' tidak ditemukan");
                 $this->skippedCount++;
                 return null;
             }
             
             // TAMBAHAN: Validasi kode rekening harus level 6
             if ($kodeRekening->level != 6) {
-                Log::warning("Kode rekening '{$row['kode']}' bukan level 6, skip import");
+                Log::warning("Kode rekening '{$kode}' bukan level 6, skip import");
                 $this->skippedCount++;
                 return null;
             }
@@ -92,9 +95,8 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 'tahun' => $this->tahun,
                 'tanggal' => $tanggal,
                 'jumlah' => $jumlah,
-                'keterangan' => $row['keterangan'] ?? null,
-                'skpd_id' => $this->skpdId,        // TAMBAHAN
-                'created_by' => $this->createdBy,  // TAMBAHAN
+                'skpd_id' => $this->skpdId,
+                'created_by' => $this->createdBy,
             ]);
             
         } catch (\Exception $e) {
@@ -139,40 +141,42 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     }
     
     /**
-     * Clean currency format dari value
-     * Support nilai minus/negatif
+     * Clean currency format dari value — support format Indonesia (titik=ribuan, koma=desimal)
+     * Contoh: "135.100,00" → 135100 | "2.456.172.889.497" → 2456172889497
      */
     private function cleanCurrencyValue($value)
     {
-        // Handle jika sudah numeric
+        // Sudah numeric (Excel simpan sebagai angka)
         if (is_numeric($value)) {
             return (float) $value;
         }
-        
-        // Convert to string first
+
         $valueStr = strval($value);
-        
-        // Check if negative (bisa pakai tanda minus atau dalam kurung)
-        $isNegative = false;
-        if (strpos($valueStr, '-') !== false || 
-            (strpos($valueStr, '(') !== false && strpos($valueStr, ')') !== false)) {
-            $isNegative = true;
+
+        // Deteksi nilai negatif
+        $isNegative = strpos($valueStr, '-') !== false ||
+                      (strpos($valueStr, '(') !== false && strpos($valueStr, ')') !== false);
+
+        // Hapus karakter selain digit, titik, dan koma
+        $cleaned = preg_replace('/[^0-9.,]/', '', $valueStr);
+
+        if (strpos($cleaned, ',') !== false) {
+            // Format Indonesia: titik = pemisah ribuan, koma = desimal
+            // "135.100,00" → hapus titik → "135100,00" → ganti koma → "135100.00"
+            $cleaned = str_replace('.', '', $cleaned);
+            $cleaned = str_replace(',', '.', $cleaned);
+        } else {
+            // Tidak ada koma: titik dianggap pemisah ribuan
+            // "2.456.172.889.497" → "2456172889497"
+            $cleaned = str_replace('.', '', $cleaned);
         }
-        
-        // Hapus semua karakter non-numeric kecuali koma dan titik
-        $cleaned = preg_replace('/[^0-9,.]/', '', $valueStr);
-        
-        // Ganti koma dengan titik untuk desimal
-        $cleaned = str_replace(',', '.', $cleaned);
-        
-        // Convert ke float
+
         $numericValue = floatval($cleaned);
-        
-        // Apply negative if needed
+
         if ($isNegative && $numericValue > 0) {
             $numericValue = -$numericValue;
         }
-        
+
         return $numericValue;
     }
     
@@ -184,7 +188,7 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
         return [
             'kode' => 'required',
             'tanggal' => 'required',
-            'jumlah' => 'required|numeric', // PERUBAHAN: Hapus min:0 untuk support nilai minus
+            'jumlah' => 'required',
         ];
     }
     
@@ -197,8 +201,6 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             'kode.required' => 'Kode rekening tidak boleh kosong',
             'tanggal.required' => 'Tanggal tidak boleh kosong',
             'jumlah.required' => 'Jumlah tidak boleh kosong',
-            'jumlah.numeric' => 'Jumlah harus berupa angka',
-            // PERUBAHAN: Hapus message untuk min karena sudah dihapus rule-nya
         ];
     }
     
