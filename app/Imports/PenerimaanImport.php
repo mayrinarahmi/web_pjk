@@ -87,10 +87,8 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 return null;
             }
             
-            $this->processedCount++;
-            
-            // Create penerimaan dengan SKPD ID
-            return new Penerimaan([
+            // Save langsung di dalam try-catch agar DB error pun tertangkap
+            $penerimaan = new Penerimaan([
                 'kode_rekening_id' => $kodeRekening->id,
                 'tahun' => $this->tahun,
                 'tanggal' => $tanggal,
@@ -98,7 +96,11 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
                 'skpd_id' => $this->skpdId,
                 'created_by' => $this->createdBy,
             ]);
-            
+            $penerimaan->save();
+            $this->processedCount++;
+
+            return null; // sudah di-save, package tidak perlu save lagi
+
         } catch (\Exception $e) {
             Log::error('Error processing row: ' . $e->getMessage(), ['row' => $row]);
             $this->skippedCount++;
