@@ -28,8 +28,8 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     public function __construct($tahun, $skpdId = null, $createdBy = null)
     {
         $this->tahun = $tahun;
-        $this->skpdId = $skpdId;        // TAMBAHAN
-        $this->createdBy = $createdBy;  // TAMBAHAN
+        $this->skpdId = $skpdId ?: null;        // konversi '' ke null agar tidak error di MySQL
+        $this->createdBy = $createdBy ?: null;
     }
     
     /**
