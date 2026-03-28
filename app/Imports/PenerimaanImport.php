@@ -101,7 +101,8 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             
         } catch (\Exception $e) {
             Log::error('Error processing row: ' . $e->getMessage(), ['row' => $row]);
-            throw $e;
+            $this->skippedCount++;
+            return null;
         }
     }
     
@@ -118,11 +119,16 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             
             // Jika string, coba parse
             if (is_string($value)) {
-                // Coba beberapa format umum
-                $formats = ['d-m-Y', 'd/m/Y', 'Y-m-d', 'd-M-Y'];
+                // Coba beberapa format umum (termasuk tahun 2-digit seperti "02-01-26")
+                $formats = ['d-m-Y', 'd/m/Y', 'Y-m-d', 'd-M-Y', 'd-m-y', 'd/m/y'];
                 foreach ($formats as $format) {
                     try {
-                        return Carbon::createFromFormat($format, $value);
+                        $date = Carbon::createFromFormat($format, $value);
+                        // Koreksi tahun 2-digit: jika tahun < 100, tambahkan 2000
+                        if ($date->year < 100) {
+                            $date->addYears(2000);
+                        }
+                        return $date;
                     } catch (\Exception $e) {
                         continue;
                     }
