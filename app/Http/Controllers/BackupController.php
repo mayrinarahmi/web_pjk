@@ -109,15 +109,15 @@ class BackupController extends Controller
  public function create()
 {
     try {
-        // Check disk space
+        // Pastikan direktori backup ada terlebih dahulu
+        if (!Storage::disk('local')->exists('backups')) {
+            Storage::disk('local')->makeDirectory('backups');
+        }
+
+        // Check disk space (setelah direktori ada)
         if (!$this->checkDiskSpace()) {
             return redirect()->route('backup.index')
                 ->with('error', 'Ruang disk tidak cukup untuk membuat backup.');
-        }
-        
-        // Pastikan direktori backup ada
-        if (!Storage::disk('local')->exists('backups')) {
-            Storage::disk('local')->makeDirectory('backups');
         }
         
         // Nama file backup dengan timestamp
