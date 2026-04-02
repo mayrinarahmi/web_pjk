@@ -84,7 +84,7 @@
                         </div>
                         <div class="flex-grow-1 ms-3">
                             <p class="text-muted mb-1">Total Size</p>
-                            <h5 class="mb-0">{{ formatBytes($stats['total_size']) }}</h5>
+                            <h5 class="mb-0">{{ number_format($stats['total_size'] / 1024, 2) }} KB</h5>
                         </div>
                     </div>
                 </div>
@@ -166,7 +166,7 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <span class="badge bg-info">{{ formatBytes($backup['file_size']) }}</span>
+                                        <span class="badge bg-info">{{ number_format($backup['file_size'] / 1024, 2) }} KB</span>
                                     </td>
                                     <td>
                                         <small>{{ date('d M Y', $backup['created_at']) }}<br>{{ date('H:i:s', $backup['created_at']) }}</small>
