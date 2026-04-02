@@ -575,61 +575,66 @@ public function delete($id)
 // ========================================
 
 /**
- * Hapus semua data penerimaan
+ * Hapus semua data penerimaan sesuai filter tahun dan SKPD aktif
  * HANYA SUPER ADMIN yang bisa akses
  */
 public function deleteAllPenerimaan()
 {
-    // Authorization check - SUPER ADMIN ONLY
     if (!auth()->user()->isSuperAdmin()) {
         session()->flash('error', 'Unauthorized. Hanya Super Admin yang dapat menghapus semua data.');
         return;
     }
-    
+
+    if (!$this->tahun) {
+        session()->flash('error', 'Pilih tahun terlebih dahulu sebelum menghapus data.');
+        return;
+    }
+
     try {
-        // Count total records
-        $totalRecords = Penerimaan::count();
-        
+        $query = Penerimaan::where('tahun', $this->tahun);
+
+        if ($this->selectedSkpdId) {
+            $query->where('skpd_id', $this->selectedSkpdId);
+        }
+
+        $totalRecords = $query->count();
+
         if ($totalRecords == 0) {
             session()->flash('info', 'Tidak ada data penerimaan untuk dihapus.');
             return;
         }
-        
-        // Log activity
+
+        $skpdNama = $this->selectedSkpdId
+            ? (Skpd::find($this->selectedSkpdId)?->nama ?? 'SKPD tidak ditemukan')
+            : 'Semua SKPD';
+
         Log::critical('DELETE ALL PENERIMAAN', [
-            'user_id' => auth()->id(),
-            'user_name' => auth()->user()->name,
-            'user_email' => auth()->user()->email,
-            'records_deleted' => $totalRecords,
-            'ip_address' => request()->ip(),
-            'timestamp' => now()
+            'user_id'          => auth()->id(),
+            'user_name'        => auth()->user()->name,
+            'tahun'            => $this->tahun,
+            'skpd_id'          => $this->selectedSkpdId,
+            'records_deleted'  => $totalRecords,
+            'ip_address'       => request()->ip(),
+            'timestamp'        => now(),
         ]);
-        
-        // Hard delete ALL records from database
+
         DB::beginTransaction();
-        
+
         try {
-            Penerimaan::query()->delete();
+            $query->delete();
             DB::commit();
-            
-            Log::info("Successfully deleted {$totalRecords} penerimaan records");
-            
-            session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan secara permanen dari database.");
-            
-            // Redirect to refresh page
+
+            session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan tahun {$this->tahun} ({$skpdNama}) secara permanen.");
+
             return redirect()->route('penerimaan.index');
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
         }
-        
+
     } catch (\Exception $e) {
-        Log::error('Error deleting all penerimaan', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
+        Log::error('Error deleting penerimaan', ['error' => $e->getMessage()]);
         session()->flash('error', 'Terjadi kesalahan saat menghapus data: ' . $e->getMessage());
     }
 }

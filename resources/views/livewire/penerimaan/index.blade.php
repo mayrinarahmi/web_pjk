@@ -682,17 +682,22 @@
   @push('scripts')
   <script>
   function confirmDeleteAll() {
-      // Konfirmasi pertama
-      if (!confirm('⚠️ PERINGATAN!\n\nAnda akan menghapus SEMUA DATA PENERIMAAN dari database!\n\nTindakan ini TIDAK BISA DIBATALKAN!\n\nPastikan Anda sudah melakukan backup database!\n\nLanjutkan?')) {
+      var tahun = '{{ $tahun ?? "-" }}';
+      var skpd  = '{{ $selectedSkpdId ? (App\Models\Skpd::find($selectedSkpdId)?->nama ?? "SKPD dipilih") : "Semua SKPD" }}';
+
+      if (!tahun || tahun === '-') {
+          alert('Pilih tahun terlebih dahulu sebelum menghapus data.');
           return;
       }
-      
-      // Konfirmasi kedua (double check)
-      if (!confirm('⚠️ KONFIRMASI TERAKHIR!\n\nApakah Anda BENAR-BENAR YAKIN ingin menghapus SEMUA data penerimaan?\n\nKlik OK untuk melanjutkan penghapusan PERMANEN.')) {
+
+      if (!confirm('PERINGATAN!\n\nAnda akan menghapus data penerimaan:\n- Tahun : ' + tahun + '\n- SKPD  : ' + skpd + '\n\nTindakan ini TIDAK BISA DIBATALKAN!\n\nLanjutkan?')) {
           return;
       }
-      
-      // Panggil method Livewire
+
+      if (!confirm('KONFIRMASI TERAKHIR!\n\nHapus PERMANEN data penerimaan tahun ' + tahun + ' (' + skpd + ')?\n\nKlik OK untuk melanjutkan.')) {
+          return;
+      }
+
       @this.call('deleteAllPenerimaan');
   }
   </script>
