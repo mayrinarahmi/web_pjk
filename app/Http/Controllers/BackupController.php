@@ -33,12 +33,12 @@ class BackupController extends Controller
     private $maxFileSize = 104857600; // 100MB in bytes
     
     /**
-     * Constructor - Add middleware
+     * Constructor
+     * Akses dikontrol via route middleware 'permission:manage-backup'
      */
     public function __construct()
     {
-        // IMPORTANT: Hanya Super Admin yang bisa akses
-        $this->middleware(['auth', 'role:Super Admin']);
+        $this->middleware('auth');
     }
     
     /**
