@@ -401,30 +401,15 @@ class BackupController extends Controller
                     throw new \Exception('File database.sql tidak ditemukan dalam backup.');
                 }
                 
-                // Database credentials
-                $dbName = config('database.connections.mysql.database');
-                $dbUser = config('database.connections.mysql.username');
-                $dbPassword = config('database.connections.mysql.password');
-                $dbHost = config('database.connections.mysql.host', 'localhost');
-                $dbPort = config('database.connections.mysql.port', '3306');
-                
-                // Restore database
-                $command = sprintf(
-                    'MYSQL_PWD=%s mysql --user=%s --host=%s --port=%s %s < %s',
-                    escapeshellarg($dbPassword),
-                    escapeshellarg($dbUser),
-                    escapeshellarg($dbHost),
-                    escapeshellarg($dbPort),
-                    escapeshellarg($dbName),
-                    escapeshellarg($dumpPath)
-                );
-                
-                exec($command . ' 2>&1', $output, $returnVar);
-                
-                if ($returnVar !== 0) {
+                // Restore database menggunakan PHP/Laravel (cross-platform, tanpa shell command)
+                $sql = file_get_contents($dumpPath);
+
+                if ($sql === false || empty(trim($sql))) {
                     $this->cleanupTempDir($tempDir);
-                    throw new \Exception('MySQL restore failed: ' . implode("\n", $output));
+                    throw new \Exception('File SQL backup kosong atau tidak dapat dibaca.');
                 }
+
+                DB::unprepared($sql);
                 
                 // Cleanup temp directory
                 $this->cleanupTempDir($tempDir);
