@@ -674,8 +674,14 @@ public function deleteAllPenerimaan()
     private function loadDetailPenerimaan($kodeRekeningId)
     {
         $user = auth()->user();
-        
-        $query = Penerimaan::where('kode_rekening_id', $kodeRekeningId);
+
+        // Cari semua ID kode_rekening yang punya kode yang sama (beda berlaku_mulai/tahun)
+        $kodeStr = KodeRekening::find($kodeRekeningId)?->kode;
+        $allIds = $kodeStr
+            ? KodeRekening::where('kode', $kodeStr)->pluck('id')
+            : collect([$kodeRekeningId]);
+
+        $query = Penerimaan::whereIn('kode_rekening_id', $allIds);
         
         // Apply SKPD filter
         if ($user->skpd_id && !$user->canViewAllSkpd()) {
@@ -873,8 +879,12 @@ public function deleteAllPenerimaan()
             $penerimaanQuery = Penerimaan::query();
 
             if ($kode->level == 6) {
-                // Level 6 - direct match
-                $penerimaanQuery->where('kode_rekening_id', $kode->id);
+                // Level 6: match by kode string agar tetap benar meski ID berbeda
+                // antar tahun berlaku_mulai (cross-year ID mismatch)
+                $kodeStr = $kode->kode;
+                $penerimaanQuery->whereHas('kodeRekening', function($q) use ($kodeStr) {
+                    $q->where('kode', $kodeStr);
+                });
             } else {
                 // Level 1-5 - sum dari children Level 6
                 $pattern = $kode->kode . '%';
