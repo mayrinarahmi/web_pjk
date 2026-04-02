@@ -41,9 +41,9 @@
         {{-- TAMBAHAN BARU: Tombol Hapus Semua Data --}}
         {{-- ========================================== --}}
         @if(auth()->user()->isSuperAdmin())
-        <button type="button" 
+        <button type="button"
                 class="btn btn-danger btn-sm"
-                onclick="confirmDeleteAll()"
+                wire:click="openDeleteAllConfirm"
                 title="Hapus Semua Data Penerimaan">
             <i class="bx bx-trash"></i> Hapus Semua Data
         </button>
@@ -678,29 +678,41 @@
       }
   </style>
 
-  {{-- JavaScript Konfirmasi Hapus Semua --}}
-  @push('scripts')
-  <script>
-  function confirmDeleteAll() {
-      var tahun = '{{ $tahun ?? "-" }}';
-      var skpd  = '{{ $selectedSkpdId ? (App\Models\Skpd::find($selectedSkpdId)?->nama ?? "SKPD dipilih") : "Semua SKPD" }}';
-
-      if (!tahun || tahun === '-') {
-          alert('Pilih tahun terlebih dahulu sebelum menghapus data.');
-          return;
-      }
-
-      if (!confirm('PERINGATAN!\n\nAnda akan menghapus data penerimaan:\n- Tahun : ' + tahun + '\n- SKPD  : ' + skpd + '\n\nTindakan ini TIDAK BISA DIBATALKAN!\n\nLanjutkan?')) {
-          return;
-      }
-
-      if (!confirm('KONFIRMASI TERAKHIR!\n\nHapus PERMANEN data penerimaan tahun ' + tahun + ' (' + skpd + ')?\n\nKlik OK untuk melanjutkan.')) {
-          return;
-      }
-
-      @this.call('deleteAllPenerimaan');
-  }
-  </script>
-  @endpush
+  {{-- Modal Konfirmasi Hapus Semua --}}
+  @if($showDeleteAllConfirm)
+  @php
+      $skpdNamaConfirm = $selectedSkpdId
+          ? (App\Models\Skpd::find($selectedSkpdId)?->nama_opd ?? 'SKPD dipilih')
+          : 'Semua SKPD';
+  @endphp
+  <div class="modal fade show" tabindex="-1" style="display:block;">
+      <div class="modal-dialog">
+          <div class="modal-content border-danger">
+              <div class="modal-header bg-danger text-white">
+                  <h5 class="modal-title"><i class="bx bx-error-circle me-1"></i> Konfirmasi Hapus Data</h5>
+                  <button type="button" class="btn-close btn-close-white" wire:click="closeDeleteAllConfirm"></button>
+              </div>
+              <div class="modal-body">
+                  <p class="mb-2">Anda akan menghapus <strong>semua data penerimaan</strong> berikut secara permanen:</p>
+                  <ul class="mb-3">
+                      <li><strong>Tahun :</strong> {{ $tahun }}</li>
+                      <li><strong>SKPD &nbsp;:</strong> {{ $skpdNamaConfirm }}</li>
+                  </ul>
+                  <div class="alert alert-danger py-2 mb-0">
+                      <i class="bx bx-info-circle"></i> Tindakan ini <strong>TIDAK BISA DIBATALKAN</strong>.
+                  </div>
+              </div>
+              <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" wire:click="closeDeleteAllConfirm">Batal</button>
+                  <button type="button" class="btn btn-danger" wire:click="deleteAllPenerimaan" wire:loading.attr="disabled">
+                      <span wire:loading wire:target="deleteAllPenerimaan" class="spinner-border spinner-border-sm me-1"></span>
+                      Ya, Hapus Permanen
+                  </button>
+              </div>
+          </div>
+      </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+  @endif
 
 </div> {{-- End of single root div --}}

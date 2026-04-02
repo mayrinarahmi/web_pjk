@@ -64,6 +64,9 @@ class Index extends Component
     public $showImportModal = false;
     public $importFile;
     public $importTahun;
+
+    // Konfirmasi hapus semua
+    public $showDeleteAllConfirm = false;
     
     protected $paginationTheme = 'bootstrap';
     
@@ -574,6 +577,20 @@ public function delete($id)
 // TAMBAHAN BARU: DELETE ALL METHOD
 // ========================================
 
+public function openDeleteAllConfirm()
+{
+    if (!$this->tahun) {
+        session()->flash('error', 'Pilih tahun terlebih dahulu sebelum menghapus data.');
+        return;
+    }
+    $this->showDeleteAllConfirm = true;
+}
+
+public function closeDeleteAllConfirm()
+{
+    $this->showDeleteAllConfirm = false;
+}
+
 /**
  * Hapus semua data penerimaan sesuai filter tahun dan SKPD aktif
  * HANYA SUPER ADMIN yang bisa akses
@@ -624,6 +641,7 @@ public function deleteAllPenerimaan()
             $query->delete();
             DB::commit();
 
+            $this->showDeleteAllConfirm = false;
             session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan tahun {$this->tahun} ({$skpdNama}) secara permanen.");
 
             return redirect()->route('penerimaan.index');
