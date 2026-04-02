@@ -15,7 +15,14 @@ class Index extends Component
     
     public $search = '';
     public $perPage = 10;
-    
+
+    // Modal Tambah/Edit SKPD
+    public $showFormModal = false;
+    public $editingSkpdId = null;
+    public $kodeOpd = '';
+    public $namaOpd = '';
+    public $statusSkpd = 'aktif';
+
     // Modal Assign Kode Rekening
     public $showAssignModal = false;
     public $selectedSkpd = null;
@@ -38,6 +45,77 @@ class Index extends Component
         $this->resetPage();
     }
     
+    public function openFormModal($skpdId = null)
+    {
+        $this->resetValidation();
+        if ($skpdId) {
+            $skpd = Skpd::findOrFail($skpdId);
+            $this->editingSkpdId = $skpd->id;
+            $this->kodeOpd       = $skpd->kode_opd;
+            $this->namaOpd       = $skpd->nama_opd;
+            $this->statusSkpd    = $skpd->status;
+        } else {
+            $this->editingSkpdId = null;
+            $this->kodeOpd       = '';
+            $this->namaOpd       = '';
+            $this->statusSkpd    = 'aktif';
+        }
+        $this->showFormModal = true;
+    }
+
+    public function closeFormModal()
+    {
+        $this->showFormModal = false;
+        $this->editingSkpdId = null;
+        $this->kodeOpd = '';
+        $this->namaOpd = '';
+        $this->statusSkpd = 'aktif';
+        $this->resetValidation();
+    }
+
+    public function saveSkpd()
+    {
+        $this->validate([
+            'kodeOpd'  => 'required|string|max:50|unique:skpd,kode_opd' . ($this->editingSkpdId ? ',' . $this->editingSkpdId : ''),
+            'namaOpd'  => 'required|string|max:255',
+            'statusSkpd' => 'required|in:aktif,nonaktif',
+        ], [
+            'kodeOpd.required'  => 'Kode OPD wajib diisi.',
+            'kodeOpd.unique'    => 'Kode OPD sudah digunakan.',
+            'namaOpd.required'  => 'Nama OPD wajib diisi.',
+        ]);
+
+        $data = [
+            'kode_opd'  => strtoupper(trim($this->kodeOpd)),
+            'nama_opd'  => trim($this->namaOpd),
+            'status'    => $this->statusSkpd,
+        ];
+
+        if ($this->editingSkpdId) {
+            Skpd::findOrFail($this->editingSkpdId)->update($data);
+            session()->flash('message', 'SKPD berhasil diperbarui.');
+        } else {
+            Skpd::create($data);
+            session()->flash('message', 'SKPD berhasil ditambahkan.');
+        }
+
+        $this->closeFormModal();
+    }
+
+    public function deleteSkpd($skpdId)
+    {
+        $skpd = Skpd::findOrFail($skpdId);
+
+        // Cek apakah masih ada user yang terkait
+        if ($skpd->users()->count() > 0) {
+            session()->flash('error', 'SKPD tidak bisa dihapus karena masih memiliki user terdaftar.');
+            return;
+        }
+
+        $skpd->delete();
+        session()->flash('message', 'SKPD berhasil dihapus.');
+    }
+
     public function openAssignModal($skpdId)
     {
         $this->selectedSkpdId = $skpdId;

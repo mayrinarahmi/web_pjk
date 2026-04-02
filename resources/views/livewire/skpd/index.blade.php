@@ -2,11 +2,9 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Kelola SKPD</h5>
-            <div class="d-flex gap-2">
-                <span class="badge bg-info">
-                    <i class="bx bx-info-circle"></i> Assign kode rekening untuk setiap SKPD
-                </span>
-            </div>
+            <button type="button" class="btn btn-primary btn-sm" wire:click="openFormModal()">
+                <i class="bx bx-plus"></i> Tambah SKPD
+            </button>
         </div>
         <div class="card-body">
             <!-- Search -->
@@ -86,17 +84,28 @@
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <button type="button" class="btn btn-primary" 
+                                    <button type="button" class="btn btn-primary"
                                             wire:click="openAssignModal({{ $skpd->id }})"
                                             title="Assign Kode Rekening">
                                         <i class="bx bx-list-check"></i> Assign
                                     </button>
-                                    @if($skpd->assignment_count > 0)
+                                    <button type="button" class="btn btn-warning"
+                                            wire:click="openFormModal({{ $skpd->id }})"
+                                            title="Edit SKPD">
+                                        <i class="bx bx-edit"></i>
+                                    </button>
                                     <button type="button" class="btn btn-danger"
-                                            onclick="confirm('Hapus semua assignment untuk {{ $skpd->nama_opd }}?') || event.stopImmediatePropagation()"
-                                            wire:click="clearAssignment({{ $skpd->id }})"
-                                            title="Clear Assignment">
+                                            onclick="confirm('Hapus SKPD {{ addslashes($skpd->nama_opd) }}?') || event.stopImmediatePropagation()"
+                                            wire:click="deleteSkpd({{ $skpd->id }})"
+                                            title="Hapus SKPD">
                                         <i class="bx bx-trash"></i>
+                                    </button>
+                                    @if($skpd->assignment_count > 0)
+                                    <button type="button" class="btn btn-secondary"
+                                            onclick="confirm('Hapus semua assignment untuk {{ addslashes($skpd->nama_opd) }}?') || event.stopImmediatePropagation()"
+                                            wire:click="clearAssignment({{ $skpd->id }})"
+                                            title="Clear Assignment Kode Rekening">
+                                        <i class="bx bx-x-circle"></i>
                                     </button>
                                     @endif
                                 </div>
@@ -205,6 +214,49 @@
         @endif
     @endforeach
     
+    <!-- Modal Tambah / Edit SKPD -->
+    @if($showFormModal)
+    <div class="modal fade show" tabindex="-1" style="display:block;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ $editingSkpdId ? 'Edit SKPD' : 'Tambah SKPD' }}</h5>
+                    <button type="button" class="btn-close" wire:click="closeFormModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Kode OPD <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @error('kodeOpd') is-invalid @enderror"
+                               wire:model="kodeOpd" placeholder="Contoh: 1.01.01">
+                        @error('kodeOpd') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nama OPD <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @error('namaOpd') is-invalid @enderror"
+                               wire:model="namaOpd" placeholder="Contoh: DINAS PENDAPATAN DAERAH">
+                        @error('namaOpd') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" wire:model="statusSkpd">
+                            <option value="aktif">Aktif</option>
+                            <option value="nonaktif">Nonaktif</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" wire:click="closeFormModal">Batal</button>
+                    <button type="button" class="btn btn-primary" wire:click="saveSkpd" wire:loading.attr="disabled">
+                        <span wire:loading wire:target="saveSkpd" class="spinner-border spinner-border-sm me-1"></span>
+                        Simpan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+    @endif
+
     <!-- Modal Assign Kode Rekening -->
     <div class="modal fade @if($showAssignModal) show @endif" 
          tabindex="-1" 
