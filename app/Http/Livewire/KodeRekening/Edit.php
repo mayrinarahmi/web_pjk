@@ -12,10 +12,11 @@ class Edit extends Component
     public $level;
     public $parent_id;
     public $is_active;
-    
+    public $berlaku_mulai = null;
+
     public $availableParents = [];
     public $parentSearch = '';
-    
+
     protected function rules()
     {
         return [
@@ -24,6 +25,7 @@ class Edit extends Component
             'level' => 'required|integer|min:1|max:6',
             'parent_id' => 'nullable|exists:kode_rekening,id',
             'is_active' => 'boolean',
+            'berlaku_mulai' => 'nullable|integer|min:2000|max:2099',
         ];
     }
     
@@ -36,6 +38,7 @@ class Edit extends Component
         $this->level = $kodeRekening->level;
         $this->parent_id = $kodeRekening->parent_id;
         $this->is_active = $kodeRekening->is_active;
+        $this->berlaku_mulai = $kodeRekening->berlaku_mulai;
         
         $this->updateAvailableParents();
     }
@@ -87,6 +90,7 @@ class Edit extends Component
             'level' => $this->level,
             'parent_id' => $this->parent_id,
             'is_active' => $this->is_active,
+            'berlaku_mulai' => $this->berlaku_mulai ?: null,
         ]);
         
         session()->flash('message', 'Kode rekening berhasil diperbarui.');

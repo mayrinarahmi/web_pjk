@@ -517,14 +517,19 @@ public function validateTargetHierarchi($tahunAnggaranId, $skpdId = null)
             return $query;
         }
 
-        $maxBerlaku = self::where('berlaku_mulai', '<=', $tahun)
+        $maxBerlaku = self::whereNotNull('berlaku_mulai')
+                          ->where('berlaku_mulai', '<=', $tahun)
                           ->max('berlaku_mulai');
 
+        // Kode rekening dengan berlaku_mulai = NULL dianggap selalu berlaku
         if ($maxBerlaku === null) {
-            return $query;
+            return $query->whereNull('berlaku_mulai');
         }
 
-        return $query->where('berlaku_mulai', $maxBerlaku);
+        return $query->where(function ($q) use ($maxBerlaku) {
+            $q->where('berlaku_mulai', $maxBerlaku)
+              ->orWhereNull('berlaku_mulai');
+        });
     }
     
     // ==========================================

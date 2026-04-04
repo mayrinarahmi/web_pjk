@@ -66,6 +66,20 @@
                 @endif
                 
                 <div class="mb-3">
+                    <label for="berlaku_mulai" class="form-label">Berlaku Mulai (Tahun)</label>
+                    <input type="number"
+                           class="form-control @error('berlaku_mulai') is-invalid @enderror"
+                           id="berlaku_mulai"
+                           wire:model="berlaku_mulai"
+                           placeholder="Contoh: 2026 (kosongkan jika selalu berlaku)"
+                           min="2000" max="2099">
+                    @error('berlaku_mulai')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <div class="form-text text-muted">Kosongkan jika kode rekening berlaku di semua tahun.</div>
+                </div>
+
+                <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="is_active" wire:model="is_active">
                         <label class="form-check-label" for="is_active">

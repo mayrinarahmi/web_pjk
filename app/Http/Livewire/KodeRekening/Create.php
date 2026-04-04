@@ -10,15 +10,17 @@ class Create extends Component
     public $nama;
     public $level = 1;
     public $parent_id = null;
-    
+    public $berlaku_mulai = null;
+
     public $availableParents = [];
     public $parentSearch = '';
-    
+
     protected $rules = [
         'kode' => 'required|string|max:50|unique:kode_rekening,kode',
         'nama' => 'required|string|max:255',
         'level' => 'required|integer|min:1|max:6',
         'parent_id' => 'nullable|exists:kode_rekening,id',
+        'berlaku_mulai' => 'nullable|integer|min:2000|max:2099',
     ];
     
     public function mount()
@@ -71,6 +73,7 @@ class Create extends Component
             'nama' => $this->nama,
             'level' => $this->level,
             'parent_id' => $this->parent_id,
+            'berlaku_mulai' => $this->berlaku_mulai ?: null,
             'is_active' => true,
         ]);
         
