@@ -30,6 +30,7 @@ class Index extends Component
     public $kodeRekeningTree = [];
     public $selectedKodeRekening = [];
     public $assignTahunFilter = ''; // Filter berlaku_mulai pada assignment tree
+    public $assignSearch = '';     // Filter pencarian teks pada assignment tree
     
     protected $paginationTheme = 'bootstrap';
     
@@ -165,6 +166,7 @@ class Index extends Component
         $this->selectedSkpdId = null;
         $this->selectedKodeRekening = [];
         $this->kodeRekeningTree = [];
+        $this->assignSearch = '';
     }
     
     public function updatedAssignTahunFilter()
@@ -444,6 +446,50 @@ class Index extends Component
         }
     }
     
+    private function nodeMatchesSearch(array $node, string $term): bool
+    {
+        return str_contains(strtolower($node['kode']), $term)
+            || str_contains(strtolower($node['nama']), $term);
+    }
+
+    private function filterTree(array $tree, string $term): array
+    {
+        if ($term === '') {
+            return $tree;
+        }
+
+        $filtered = [];
+        foreach ($tree as $l3) {
+            $l3Matches = $this->nodeMatchesSearch($l3, $term);
+            $filteredL4 = [];
+
+            foreach ($l3['children'] as $l4) {
+                $l4Matches = $this->nodeMatchesSearch($l4, $term);
+                $filteredL5 = [];
+
+                foreach ($l4['children'] as $l5) {
+                    if ($l4Matches || $l3Matches || $this->nodeMatchesSearch($l5, $term)) {
+                        $filteredL5[] = $l5;
+                    }
+                }
+
+                if ($l4Matches || $l3Matches || count($filteredL5) > 0) {
+                    $l4Copy = $l4;
+                    $l4Copy['children'] = $filteredL5;
+                    $filteredL4[] = $l4Copy;
+                }
+            }
+
+            if ($l3Matches || count($filteredL4) > 0) {
+                $l3Copy = $l3;
+                $l3Copy['children'] = $filteredL4;
+                $filtered[] = $l3Copy;
+            }
+        }
+
+        return $filtered;
+    }
+
     public function render()
     {
         $query = Skpd::query();
@@ -475,8 +521,11 @@ class Index extends Component
             $skpd->assignment_count = count($access);
         }
         
+        $filteredTree = $this->filterTree($this->kodeRekeningTree, strtolower(trim($this->assignSearch)));
+
         return view('livewire.skpd.index', [
-            'skpdList' => $skpdList
+            'skpdList' => $skpdList,
+            'filteredTree' => $filteredTree,
         ]);
     }
 }

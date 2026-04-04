@@ -282,8 +282,8 @@
                         Check parent akan otomatis check semua children.
                     </div>
 
-                    <!-- Filter Berlaku Mulai -->
-                    <div class="row mb-3">
+                    <!-- Filter Berlaku Mulai + Search -->
+                    <div class="row mb-3 g-2">
                         <div class="col-md-4">
                             <label class="form-label fw-bold">Filter Kode Rekening</label>
                             <select class="form-select" wire:model.live="assignTahunFilter">
@@ -295,6 +295,22 @@
                                     <option value="{{ $year }}">Berlaku mulai {{ $year }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">Cari Kode / Nama</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bx bx-search"></i></span>
+                                <input type="text"
+                                       class="form-control"
+                                       wire:model.live.debounce.300ms="assignSearch"
+                                       placeholder="Ketik kode atau nama kode rekening..."
+                                       autocomplete="off">
+                                @if($assignSearch)
+                                <button class="btn btn-outline-secondary" type="button" wire:click="$set('assignSearch', '')">
+                                    <i class="bx bx-x"></i>
+                                </button>
+                                @endif
+                            </div>
                         </div>
                     </div>
                     
@@ -308,7 +324,13 @@
                     
                     <!-- Kode Rekening Tree -->
                     <div wire:loading.remove wire:target="openAssignModal" class="kode-tree">
-                        @foreach($kodeRekeningTree as $level3)
+                        @if($assignSearch && count($filteredTree) === 0)
+                            <div class="text-center text-muted py-4">
+                                <i class="bx bx-search-alt fs-3"></i>
+                                <p class="mt-2">Tidak ada kode rekening yang cocok dengan "<strong>{{ $assignSearch }}</strong>"</p>
+                            </div>
+                        @endif
+                        @foreach($filteredTree as $level3)
                         <div class="tree-level-3 mb-2">
                             <div class="form-check">
                                 <input type="checkbox" 
