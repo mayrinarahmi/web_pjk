@@ -450,29 +450,31 @@
         }
     </style>
 
-    <script>
-    $(document).on('input', '.kode-search-input', function () {
-        var term  = $(this).val().toLowerCase();
-        var table = $('#' + $(this).data('target'));
-        var rows  = table.find('tbody tr');
-        var count = 0;
-
-        rows.each(function () {
-            var kode  = $(this).find('td:eq(0)').text().toLowerCase();
-            var uraian = $(this).find('td:eq(1)').text().toLowerCase();
-            var match = kode.includes(term) || uraian.includes(term);
-            $(this).toggle(match);
-            if (match) count++;
-        });
-
-        // Update count label
-        var countEl = $('#count' + $(this).data('target').replace('kodeTable', ''));
-        countEl.text(term ? (count + ' dari ' + rows.length + ' data') : (rows.length + ' data'));
-    });
-
-    // Reset search input saat modal ditutup
-    $(document).on('hidden.bs.modal', function (e) {
-        $(e.target).find('.kode-search-input').val('').trigger('input');
-    });
-    </script>
 </div>
+
+@push('scripts')
+<script>
+$(document).on('input', '.kode-search-input', function () {
+    var term  = $(this).val().toLowerCase();
+    var table = $('#' + $(this).data('target'));
+    var rows  = table.find('tbody tr');
+    var count = 0;
+
+    rows.each(function () {
+        var kode   = $(this).find('td:eq(0)').text().toLowerCase();
+        var uraian = $(this).find('td:eq(1)').text().toLowerCase();
+        var match  = kode.includes(term) || uraian.includes(term);
+        $(this).toggle(match);
+        if (match) count++;
+    });
+
+    var skpdId  = $(this).data('target').replace('kodeTable', '');
+    var countEl = $('#count' + skpdId);
+    countEl.text(term ? (count + ' dari ' + rows.length + ' data') : (rows.length + ' data'));
+});
+
+$(document).on('hidden.bs.modal', function (e) {
+    $(e.target).find('.kode-search-input').val('').trigger('input');
+});
+</script>
+@endpush
