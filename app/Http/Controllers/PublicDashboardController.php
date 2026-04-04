@@ -270,8 +270,20 @@ class PublicDashboardController extends Controller
                         continue;
                     }
 
-                    // Hitung target dari target_anggaran berdasarkan kode_rekening_access
-                    $target = TargetAnggaran::whereIn('kode_rekening_id', $accessIds)
+                    // Ambil kode string dari accessIds (agar cross-berlaku_mulai tetap match)
+                    $accessKodes = KodeRekening::whereIn('id', $accessIds)
+                        ->pluck('kode');
+
+                    if ($accessKodes->isEmpty()) {
+                        continue;
+                    }
+
+                    // Semua ID kode rekening yang punya kode yang sama (beda berlaku_mulai)
+                    $allMatchingIds = KodeRekening::whereIn('kode', $accessKodes)
+                        ->pluck('id');
+
+                    // Hitung target dari target_anggaran berdasarkan kode yang match
+                    $target = TargetAnggaran::whereIn('kode_rekening_id', $allMatchingIds)
                         ->where('tahun_anggaran_id', $tahunAnggaran->id)
                         ->sum('jumlah');
 
@@ -279,10 +291,12 @@ class PublicDashboardController extends Controller
                     if ($target <= 0) {
                         continue;
                     }
-                    
-                    // Hitung realisasi
+
+                    // Hitung realisasi hanya untuk kode rekening yang di-assign ke SKPD ini
+                    // (bukan semua penerimaan SKPD, agar konsisten dengan target)
                     $realisasi = Penerimaan::where('skpd_id', $skpd->id)
                         ->where('tahun', $tahun)
+                        ->whereIn('kode_rekening_id', $allMatchingIds)
                         ->sum('jumlah');
                     
                     // Hitung persentase
