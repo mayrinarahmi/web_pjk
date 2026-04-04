@@ -715,4 +715,42 @@
   <div class="modal-backdrop fade show"></div>
   @endif
 
+  {{-- Modal Detail Baris Dilewati --}}
+  @if($showSkippedModal && count($skippedRows) > 0)
+  <div class="modal fade show" tabindex="-1" style="display:block; z-index:1060;">
+      <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+              <div class="modal-header bg-warning text-dark">
+                  <h5 class="modal-title"><i class="bx bx-error me-1"></i> Detail {{ count($skippedRows) }} Baris yang Dilewati</h5>
+                  <button type="button" class="btn-close" wire:click="closeSkippedModal"></button>
+              </div>
+              <div class="modal-body p-0">
+                  <table class="table table-sm table-bordered mb-0">
+                      <thead class="table-light">
+                          <tr>
+                              <th class="text-center" style="width:70px;">Baris</th>
+                              <th style="width:160px;">Kode</th>
+                              <th>Alasan Dilewati</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          @foreach($skippedRows as $row)
+                          <tr>
+                              <td class="text-center">{{ $row['baris'] }}</td>
+                              <td><code>{{ $row['kode'] }}</code></td>
+                              <td class="text-danger">{{ $row['alasan'] }}</td>
+                          </tr>
+                          @endforeach
+                      </tbody>
+                  </table>
+              </div>
+              <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" wire:click="closeSkippedModal">Tutup</button>
+              </div>
+          </div>
+      </div>
+  </div>
+  <div class="modal-backdrop fade show" style="z-index:1055;"></div>
+  @endif
+
 </div> {{-- End of single root div --}}

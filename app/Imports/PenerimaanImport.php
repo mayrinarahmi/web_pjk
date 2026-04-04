@@ -24,6 +24,8 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     private $createdBy;   // TAMBAHAN
     private $processedCount = 0;
     private $skippedCount = 0;
+    private $skippedRows = [];
+    private $rowNumber = 1; // baris data (1 = baris pertama setelah header)
     
     public function __construct($tahun, $skpdId = null, $createdBy = null)
     {
@@ -37,6 +39,9 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
      */
     public function model(array $row)
     {
+        $this->rowNumber++;
+        $currentRow = $this->rowNumber;
+
         try {
             // Skip jika data kosong
             if (empty($row['kode']) || empty($row['tanggal']) || empty($row['jumlah'])) {
@@ -55,38 +60,42 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             }
 
             $kodeRekening = $kodeQuery->first();
-            
+
             if (!$kodeRekening) {
                 Log::warning("Kode rekening '{$kode}' tidak ditemukan");
+                $this->skippedRows[] = ['baris' => $currentRow, 'kode' => $kode, 'alasan' => "Kode rekening '{$kode}' tidak ditemukan"];
                 $this->skippedCount++;
                 return null;
             }
-            
+
             // TAMBAHAN: Validasi kode rekening harus level 6
             if ($kodeRekening->level != 6) {
                 Log::warning("Kode rekening '{$kode}' bukan level 6, skip import");
+                $this->skippedRows[] = ['baris' => $currentRow, 'kode' => $kode, 'alasan' => "Kode '{$kode}' bukan level 6 (level {$kodeRekening->level})"];
                 $this->skippedCount++;
                 return null;
             }
-            
+
             // Parse tanggal - handle berbagai format
             $tanggal = $this->parseDate($row['tanggal']);
             if (!$tanggal) {
                 Log::warning("Format tanggal tidak valid: {$row['tanggal']}");
+                $this->skippedRows[] = ['baris' => $currentRow, 'kode' => $kode, 'alasan' => "Format tanggal tidak valid: '{$row['tanggal']}'"];
                 $this->skippedCount++;
                 return null;
             }
-            
+
             // Clean jumlah value - bisa terima nilai minus
             $jumlah = $this->cleanCurrencyValue($row['jumlah']);
-            
+
             // Validasi tahun dari tanggal harus sesuai dengan tahun yang dipilih
             if ($tanggal->year != $this->tahun) {
                 Log::warning("Tanggal {$tanggal->format('d-m-Y')} tidak sesuai dengan tahun {$this->tahun}");
+                $this->skippedRows[] = ['baris' => $currentRow, 'kode' => $kode, 'alasan' => "Tahun tanggal ({$tanggal->year}) tidak sesuai dengan tahun import ({$this->tahun})"];
                 $this->skippedCount++;
                 return null;
             }
-            
+
             // Save langsung di dalam try-catch agar DB error pun tertangkap
             $penerimaan = new Penerimaan([
                 'kode_rekening_id' => $kodeRekening->id,
@@ -102,7 +111,9 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
             return null; // sudah di-save, package tidak perlu save lagi
 
         } catch (\Exception $e) {
+            $kode = isset($kode) ? $kode : ($row['kode'] ?? '?');
             Log::error('Error processing row: ' . $e->getMessage(), ['row' => $row]);
+            $this->skippedRows[] = ['baris' => $currentRow, 'kode' => $kode, 'alasan' => 'Error: ' . $e->getMessage()];
             $this->skippedCount++;
             return null;
         }
@@ -226,5 +237,13 @@ class PenerimaanImport implements ToModel, WithHeadingRow, WithValidation, Skips
     public function getSkippedCount()
     {
         return $this->skippedCount;
+    }
+
+    /**
+     * Get detail baris yang dilewati
+     */
+    public function getSkippedRows()
+    {
+        return $this->skippedRows;
     }
 }

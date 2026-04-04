@@ -67,6 +67,10 @@ class Index extends Component
 
     // Konfirmasi hapus semua
     public $showDeleteAllConfirm = false;
+
+    // Import skipped rows detail
+    public $skippedRows = [];
+    public $showSkippedModal = false;
     
     protected $paginationTheme = 'bootstrap';
     
@@ -726,6 +730,12 @@ public function deleteAllPenerimaan()
         $this->showImportModal = false;
         $this->reset(['importFile']);
     }
+
+    public function closeSkippedModal()
+    {
+        $this->showSkippedModal = false;
+        $this->skippedRows = [];
+    }
     
     public function downloadTemplate()
     {
@@ -768,12 +778,18 @@ public function deleteAllPenerimaan()
             
             $processedCount = $import->getProcessedCount();
             $skippedCount = $import->getSkippedCount();
-            
+            $this->skippedRows = $import->getSkippedRows();
+
             Storage::delete($path);
-            
+
             if ($processedCount > 0) {
-                session()->flash('message', "Import berhasil! {$processedCount} data berhasil diimport, {$skippedCount} data dilewati.");
+                $msg = "Import berhasil! {$processedCount} data berhasil diimport";
+                $msg .= $skippedCount > 0 ? ", {$skippedCount} data dilewati." : ".";
+                session()->flash('message', $msg);
                 $this->closeImportModal();
+                if ($skippedCount > 0) {
+                    $this->showSkippedModal = true;
+                }
                 // Reset tanggal ke full year agar data import langsung terlihat
                 $this->tahun = $this->importTahun;
                 $this->tanggalMulai = $this->importTahun . '-01-01';
