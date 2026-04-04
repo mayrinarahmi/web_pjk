@@ -292,11 +292,9 @@ class PublicDashboardController extends Controller
                         continue;
                     }
 
-                    // Hitung realisasi hanya untuk kode rekening yang di-assign ke SKPD ini
-                    // (bukan semua penerimaan SKPD, agar konsisten dengan target)
+                    // Hitung realisasi: semua penerimaan SKPD ini di tahun tersebut
                     $realisasi = Penerimaan::where('skpd_id', $skpd->id)
                         ->where('tahun', $tahun)
-                        ->whereIn('kode_rekening_id', $allMatchingIds)
                         ->sum('jumlah');
                     
                     // Hitung persentase
