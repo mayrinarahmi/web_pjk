@@ -14,6 +14,7 @@ class Edit extends Component
     public $is_active;
     
     public $availableParents = [];
+    public $parentSearch = '';
     
     protected function rules()
     {
@@ -42,6 +43,7 @@ class Edit extends Component
     public function updatedLevel()
     {
         $this->parent_id = null;
+        $this->parentSearch = '';
         $this->updateAvailableParents();
     }
     
@@ -93,6 +95,14 @@ class Edit extends Component
     
     public function render()
     {
-        return view('livewire.kode-rekening.edit');
+        $search = strtolower(trim($this->parentSearch));
+        $filteredParents = $search
+            ? $this->availableParents->filter(fn($p) =>
+                str_contains(strtolower($p->kode), $search) ||
+                str_contains(strtolower($p->nama), $search)
+              )->values()
+            : $this->availableParents;
+
+        return view('livewire.kode-rekening.edit', compact('filteredParents'));
     }
 }

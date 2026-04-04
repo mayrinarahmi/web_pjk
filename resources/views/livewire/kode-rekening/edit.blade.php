@@ -41,15 +41,26 @@
                 
                 @if($level > 1)
                 <div class="mb-3">
-                    <label for="parent_id" class="form-label">Parent</label>
-                    <select class="form-select @error('parent_id') is-invalid @enderror" id="parent_id" wire:model="parent_id">
-                        <option value="">Pilih Parent</option>
-                        @foreach($availableParents as $parent)
+                    <label class="form-label">Parent</label>
+                    <input type="text"
+                           class="form-control mb-1"
+                           wire:model.live.debounce.250ms="parentSearch"
+                           placeholder="Cari kode atau nama parent..."
+                           autocomplete="off">
+                    <select class="form-select @error('parent_id') is-invalid @enderror"
+                            id="parent_id"
+                            wire:model="parent_id"
+                            size="{{ min(8, max(4, count($filteredParents) + 1)) }}">
+                        <option value="">-- Pilih Parent --</option>
+                        @foreach($filteredParents as $parent)
                             <option value="{{ $parent->id }}">{{ $parent->kode }} - {{ $parent->nama }}</option>
                         @endforeach
                     </select>
+                    @if($parentSearch && count($filteredParents) === 0)
+                        <div class="text-muted small mt-1"><i class="bx bx-info-circle"></i> Tidak ada parent yang cocok dengan pencarian.</div>
+                    @endif
                     @error('parent_id')
-                        <div class="invalid-feedback">{{ $message }}</div>
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
                 </div>
                 @endif
