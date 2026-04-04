@@ -179,8 +179,21 @@
                         </div>
                         
                         @if($kodeDetails->count() > 0)
-                            <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                                <table class="table table-sm table-hover">
+                            <div class="mb-2">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bx bx-search"></i></span>
+                                    <input type="text"
+                                           class="form-control kode-search-input"
+                                           data-target="kodeTable{{ $skpd->id }}"
+                                           placeholder="Cari kode atau uraian..."
+                                           autocomplete="off">
+                                    <span class="input-group-text kode-search-count text-muted small" id="count{{ $skpd->id }}">
+                                        {{ $kodeDetails->count() }} data
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="table-responsive" style="max-height: 460px; overflow-y: auto;">
+                                <table class="table table-sm table-hover" id="kodeTable{{ $skpd->id }}">
                                     <thead class="table-light sticky-top">
                                         <tr>
                                             <th width="18%">Kode</th>
@@ -436,4 +449,30 @@
             font-size: 0.9em;
         }
     </style>
+
+    <script>
+    $(document).on('input', '.kode-search-input', function () {
+        var term  = $(this).val().toLowerCase();
+        var table = $('#' + $(this).data('target'));
+        var rows  = table.find('tbody tr');
+        var count = 0;
+
+        rows.each(function () {
+            var kode  = $(this).find('td:eq(0)').text().toLowerCase();
+            var uraian = $(this).find('td:eq(1)').text().toLowerCase();
+            var match = kode.includes(term) || uraian.includes(term);
+            $(this).toggle(match);
+            if (match) count++;
+        });
+
+        // Update count label
+        var countEl = $('#count' + $(this).data('target').replace('kodeTable', ''));
+        countEl.text(term ? (count + ' dari ' + rows.length + ' data') : (rows.length + ' data'));
+    });
+
+    // Reset search input saat modal ditutup
+    $(document).on('hidden.bs.modal', function (e) {
+        $(e.target).find('.kode-search-input').val('').trigger('input');
+    });
+    </script>
 </div>
