@@ -264,27 +264,13 @@ class PublicDashboardController extends Controller
                 $dataPerSkpd = [];
 
                 foreach ($skpdList as $skpd) {
-                    // Ambil kode_rekening IDs (level 6) yang dimiliki SKPD ini
-                    $accessIds = $skpd->kode_rekening_access;
-                    if (empty($accessIds)) {
-                        continue;
-                    }
-
-                    // Ambil kode string dari accessIds (agar cross-berlaku_mulai tetap match)
-                    $accessKodes = KodeRekening::whereIn('id', $accessIds)
-                        ->pluck('kode');
-
-                    if ($accessKodes->isEmpty()) {
-                        continue;
-                    }
-
-                    // Semua ID kode rekening yang punya kode yang sama (beda berlaku_mulai)
-                    $allMatchingIds = KodeRekening::whereIn('kode', $accessKodes)
-                        ->pluck('id');
-
-                    // Hitung target dari target_anggaran berdasarkan kode yang match
-                    $target = TargetAnggaran::whereIn('kode_rekening_id', $allMatchingIds)
+                    // Hitung target: semua TargetAnggaran level-6 milik SKPD ini
+                    // (bukan dari kode_rekening_access yang hanya berisi kode yang di-assign operator)
+                    $target = TargetAnggaran::where('skpd_id', $skpd->id)
                         ->where('tahun_anggaran_id', $tahunAnggaran->id)
+                        ->whereHas('kodeRekening', function ($q) {
+                            $q->where('level', 6);
+                        })
                         ->sum('jumlah');
 
                     // Skip jika tidak ada pagu
