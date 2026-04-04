@@ -49,8 +49,7 @@
                            autocomplete="off">
                     <select class="form-select @error('parent_id') is-invalid @enderror"
                             id="parent_id"
-                            wire:model="parent_id"
-                            size="{{ min(8, max(4, count($filteredParents) + 1)) }}">
+                            wire:model="parent_id">
                         <option value="">-- Pilih Parent --</option>
                         @foreach($filteredParents as $parent)
                             <option value="{{ $parent->id }}">{{ $parent->kode }} - {{ $parent->nama }}</option>

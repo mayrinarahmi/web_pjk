@@ -53,12 +53,16 @@ class Edit extends Component
     public function updateAvailableParents()
     {
         if ($this->level == 1) {
-            $this->availableParents = [];
+            $this->availableParents = collect([]);
         } else {
             $this->availableParents = KodeRekening::where('level', $this->level - 1)
-                ->where('id', '!=', $this->kodeRekeningId) // Hindari self-reference
+                ->where('is_active', true)
+                ->where('id', '!=', $this->kodeRekeningId)
                 ->orderBy('kode')
-                ->get();
+                ->orderByDesc('berlaku_mulai')
+                ->get()
+                ->unique('kode')
+                ->values();
         }
     }
     
