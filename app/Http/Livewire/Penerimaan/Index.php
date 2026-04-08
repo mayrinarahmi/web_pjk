@@ -626,7 +626,7 @@ public function deleteAllPenerimaan()
         }
 
         $skpdNama = $this->selectedSkpdId
-            ? (Skpd::find($this->selectedSkpdId)?->nama ?? 'SKPD tidak ditemukan')
+            ? (Skpd::find($this->selectedSkpdId)?->nama_opd ?? 'SKPD tidak ditemukan')
             : 'Semua SKPD';
 
         Log::critical('DELETE ALL PENERIMAAN', [
