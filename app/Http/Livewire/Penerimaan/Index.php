@@ -618,10 +618,19 @@ public function deleteAllPenerimaan()
             $query->where('skpd_id', $this->selectedSkpdId);
         }
 
+        if ($this->tanggalMulai) {
+            $query->whereDate('tanggal', '>=', $this->tanggalMulai);
+        }
+
+        if ($this->tanggalSelesai) {
+            $query->whereDate('tanggal', '<=', $this->tanggalSelesai);
+        }
+
         $totalRecords = $query->count();
 
         if ($totalRecords == 0) {
             session()->flash('info', 'Tidak ada data penerimaan untuk dihapus.');
+            $this->showDeleteAllConfirm = false;
             return;
         }
 
@@ -629,14 +638,20 @@ public function deleteAllPenerimaan()
             ? (Skpd::find($this->selectedSkpdId)?->nama_opd ?? 'SKPD tidak ditemukan')
             : 'Semua SKPD';
 
+        $periodeInfo = ($this->tanggalMulai && $this->tanggalSelesai)
+            ? "{$this->tanggalMulai} s/d {$this->tanggalSelesai}"
+            : "seluruh periode tahun {$this->tahun}";
+
         Log::critical('DELETE ALL PENERIMAAN', [
-            'user_id'          => auth()->id(),
-            'user_name'        => auth()->user()->name,
-            'tahun'            => $this->tahun,
-            'skpd_id'          => $this->selectedSkpdId,
-            'records_deleted'  => $totalRecords,
-            'ip_address'       => request()->ip(),
-            'timestamp'        => now(),
+            'user_id'         => auth()->id(),
+            'user_name'       => auth()->user()->name,
+            'tahun'           => $this->tahun,
+            'skpd_id'         => $this->selectedSkpdId,
+            'tanggal_mulai'   => $this->tanggalMulai,
+            'tanggal_selesai' => $this->tanggalSelesai,
+            'records_deleted' => $totalRecords,
+            'ip_address'      => request()->ip(),
+            'timestamp'       => now(),
         ]);
 
         DB::beginTransaction();
@@ -646,7 +661,7 @@ public function deleteAllPenerimaan()
             DB::commit();
 
             $this->showDeleteAllConfirm = false;
-            session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan tahun {$this->tahun} ({$skpdNama}) secara permanen.");
+            session()->flash('success', "Berhasil menghapus {$totalRecords} data penerimaan ({$skpdNama}, {$periodeInfo}) secara permanen.");
 
             return redirect()->route('penerimaan.index');
 

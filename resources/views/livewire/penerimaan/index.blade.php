@@ -695,8 +695,10 @@
               <div class="modal-body">
                   <p class="mb-2">Anda akan menghapus <strong>semua data penerimaan</strong> berikut secara permanen:</p>
                   <ul class="mb-3">
-                      <li><strong>Tahun :</strong> {{ $tahun }}</li>
-                      <li><strong>SKPD &nbsp;:</strong> {{ $skpdNamaConfirm }}</li>
+                      <li><strong>Tahun &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</strong> {{ $tahun }}</li>
+                      <li><strong>SKPD &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</strong> {{ $skpdNamaConfirm }}</li>
+                      <li><strong>Tgl Mulai &nbsp;:</strong> {{ $tanggalMulai ? \Carbon\Carbon::parse($tanggalMulai)->format('d/m/Y') : 'Awal tahun' }}</li>
+                      <li><strong>Tgl Selesai :</strong> {{ $tanggalSelesai ? \Carbon\Carbon::parse($tanggalSelesai)->format('d/m/Y') : 'Akhir tahun' }}</li>
                   </ul>
                   <div class="alert alert-danger py-2 mb-0">
                       <i class="bx bx-info-circle"></i> Tindakan ini <strong>TIDAK BISA DIBATALKAN</strong>.
