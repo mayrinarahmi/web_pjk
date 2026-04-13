@@ -52,6 +52,10 @@ class Index extends Component
     public $showDetailModal = false;
     public $selectedKodeRekening = null;
     public $detailPenerimaan = [];
+
+    // Bulk delete di detail modal
+    public $selectedDetailIds = [];
+    public $showBulkDeleteConfirm = false;
     
     // Pagination
     public $perPage = 50;
@@ -727,6 +731,64 @@ public function deleteAllPenerimaan()
         $this->showDetailModal = false;
         $this->selectedKodeRekening = null;
         $this->detailPenerimaan = [];
+        $this->selectedDetailIds = [];
+        $this->showBulkDeleteConfirm = false;
+    }
+
+    public function toggleDetailSelection($id)
+    {
+        $id = (int) $id;
+        if (in_array($id, $this->selectedDetailIds)) {
+            $this->selectedDetailIds = array_values(array_diff($this->selectedDetailIds, [$id]));
+        } else {
+            $this->selectedDetailIds[] = $id;
+        }
+        $this->showBulkDeleteConfirm = false;
+    }
+
+    public function toggleAllDetailSelection()
+    {
+        $allIds = $this->detailPenerimaan->pluck('id')->map(fn($id) => (int)$id)->toArray();
+        if (count($this->selectedDetailIds) === count($allIds)) {
+            $this->selectedDetailIds = [];
+        } else {
+            $this->selectedDetailIds = $allIds;
+        }
+        $this->showBulkDeleteConfirm = false;
+    }
+
+    public function confirmBulkDelete()
+    {
+        if (empty($this->selectedDetailIds)) return;
+        $this->showBulkDeleteConfirm = true;
+    }
+
+    public function cancelBulkDelete()
+    {
+        $this->showBulkDeleteConfirm = false;
+    }
+
+    public function deleteSelectedPenerimaan()
+    {
+        if (!auth()->user()->hasRole('Operator SKPD') && !auth()->user()->isSuperAdmin()) {
+            session()->flash('error', 'Unauthorized.');
+            return;
+        }
+
+        if (empty($this->selectedDetailIds)) return;
+
+        $count = count($this->selectedDetailIds);
+        Penerimaan::whereIn('id', $this->selectedDetailIds)->delete();
+
+        $this->selectedDetailIds = [];
+        $this->showBulkDeleteConfirm = false;
+
+        // Reload detail data agar tabel terupdate
+        if ($this->selectedKodeRekening) {
+            $this->loadDetailPenerimaan($this->selectedKodeRekening->id);
+        }
+
+        session()->flash('success', "{$count} data penerimaan berhasil dihapus.");
     }
 
     // ==========================================

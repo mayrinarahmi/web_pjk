@@ -547,21 +547,60 @@
                </div>
                <div class="modal-body">
                    @if($detailPenerimaan && count($detailPenerimaan) > 0)
+
+                       {{-- Bulk delete confirmation bar --}}
+                       @if($showBulkDeleteConfirm)
+                       <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 mb-2">
+                           <span>
+                               <i class="bx bx-error-circle me-1"></i>
+                               Hapus <strong>{{ count($selectedDetailIds) }} data</strong> senilai
+                               <strong>
+                                   Rp {{ number_format($detailPenerimaan->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
+                               </strong>? Tindakan ini tidak bisa dibatalkan.
+                           </span>
+                           <div class="d-flex gap-1">
+                               <button class="btn btn-sm btn-light" wire:click="cancelBulkDelete">Batal</button>
+                               <button class="btn btn-sm btn-danger" wire:click="deleteSelectedPenerimaan" wire:loading.attr="disabled">
+                                   <span wire:loading wire:target="deleteSelectedPenerimaan" class="spinner-border spinner-border-sm me-1"></span>
+                                   Ya, Hapus
+                               </button>
+                           </div>
+                       </div>
+                       @endif
+
                        <div class="table-responsive">
                            <table class="table table-sm table-striped">
                                <thead>
                                    <tr>
-                                       <th width="5%">No</th>
-                                       <th width="12%">Tanggal</th>
-                                       <th width="20%">Jumlah</th>
-                                       <th width="35%">Keterangan</th>
-                                       <th width="15%">SKPD</th>
-                                       <th width="13%">Aksi</th>
+                                       @can('delete-penerimaan')
+                                       @if(auth()->user()->hasRole('Operator SKPD') || auth()->user()->isSuperAdmin())
+                                       <th width="4%" class="text-center">
+                                           <input type="checkbox" class="form-check-input"
+                                               wire:click="toggleAllDetailSelection"
+                                               @if(count($selectedDetailIds) === count($detailPenerimaan)) checked @endif>
+                                       </th>
+                                       @endif
+                                       @endcan
+                                       <th width="4%">No</th>
+                                       <th width="11%">Tanggal</th>
+                                       <th width="18%">Jumlah</th>
+                                       <th width="32%">Keterangan</th>
+                                       <th width="14%">SKPD</th>
+                                       <th width="12%">Aksi</th>
                                    </tr>
                                </thead>
                                <tbody>
                                    @foreach($detailPenerimaan as $index => $detail)
-                                   <tr>
+                                   <tr class="{{ in_array($detail->id, $selectedDetailIds) ? 'table-warning' : '' }}">
+                                       @can('delete-penerimaan')
+                                       @if(auth()->user()->hasRole('Operator SKPD') || auth()->user()->isSuperAdmin())
+                                       <td class="text-center">
+                                           <input type="checkbox" class="form-check-input"
+                                               wire:click="toggleDetailSelection({{ $detail->id }})"
+                                               @if(in_array($detail->id, $selectedDetailIds)) checked @endif>
+                                       </td>
+                                       @endif
+                                       @endcan
                                        <td>{{ $index + 1 }}</td>
                                        <td>{{ $detail->tanggal->format('d-m-Y') }}</td>
                                        <td class="text-end">
@@ -580,16 +619,16 @@
                                        <td>
                                            <div class="btn-group btn-group-sm" role="group">
                                                @can('edit-penerimaan')
-                                               <a href="{{ route('penerimaan.edit', $detail->id) }}" 
+                                               <a href="{{ route('penerimaan.edit', $detail->id) }}"
                                                    class="btn btn-primary"
                                                    title="Edit">
                                                    <i class="bx bx-edit"></i>
                                                </a>
                                                @endcan
                                                @can('delete-penerimaan')
-                                               <button type="button" class="btn btn-danger" 
-                                                   onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()" 
-                                                   wire:click="delete({{ $detail->id }})" 
+                                               <button type="button" class="btn btn-danger"
+                                                   onclick="confirm('Apakah Anda yakin ingin menghapus data ini?') || event.stopImmediatePropagation()"
+                                                   wire:click="delete({{ $detail->id }})"
                                                    wire:loading.attr="disabled"
                                                    title="Hapus">
                                                    <i class="bx bx-trash"></i>
@@ -602,6 +641,11 @@
                                </tbody>
                                <tfoot>
                                    <tr class="table-info">
+                                       @can('delete-penerimaan')
+                                       @if(auth()->user()->hasRole('Operator SKPD') || auth()->user()->isSuperAdmin())
+                                       <th></th>
+                                       @endif
+                                       @endcan
                                        <th colspan="2">Total</th>
                                        <th class="text-end">
                                            <span class="{{ $detailPenerimaan->sum('jumlah') < 0 ? 'text-danger' : '' }}">
@@ -620,7 +664,18 @@
                        </div>
                    @endif
                </div>
-               <div class="modal-footer">
+               <div class="modal-footer d-flex justify-content-between align-items-center">
+                   <div>
+                       @can('delete-penerimaan')
+                       @if((auth()->user()->hasRole('Operator SKPD') || auth()->user()->isSuperAdmin()) && count($selectedDetailIds) > 0)
+                       <button type="button" class="btn btn-danger btn-sm" wire:click="confirmBulkDelete">
+                           <i class="bx bx-trash me-1"></i>
+                           Hapus Dipilih ({{ count($selectedDetailIds) }})
+                           &mdash; Rp {{ number_format($detailPenerimaan->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
+                       </button>
+                       @endif
+                       @endcan
+                   </div>
                    <button type="button" class="btn btn-secondary" wire:click="closeDetailModal">
                        Tutup
                    </button>
