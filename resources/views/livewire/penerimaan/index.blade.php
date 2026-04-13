@@ -591,13 +591,14 @@
                                </thead>
                                <tbody>
                                    @foreach($detailPenerimaan as $index => $detail)
-                                   <tr class="{{ in_array($detail->id, $selectedDetailIds) ? 'table-warning' : '' }}">
+                                   <tr wire:key="detail-row-{{ $detail->id }}"
+                                       class="{{ in_array((string)$detail->id, array_map('strval', $selectedDetailIds)) ? 'table-warning' : '' }}">
                                        @can('delete-penerimaan')
                                        @if(auth()->user()->hasRole('Operator SKPD') || auth()->user()->isSuperAdmin())
                                        <td class="text-center">
                                            <input type="checkbox" class="form-check-input"
-                                               wire:click="toggleDetailSelection({{ $detail->id }})"
-                                               @if(in_array($detail->id, $selectedDetailIds)) checked @endif>
+                                               wire:model.live="selectedDetailIds"
+                                               value="{{ $detail->id }}">
                                        </td>
                                        @endif
                                        @endcan

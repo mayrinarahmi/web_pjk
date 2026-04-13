@@ -735,21 +735,19 @@ public function deleteAllPenerimaan()
         $this->showBulkDeleteConfirm = false;
     }
 
-    public function toggleDetailSelection($id)
+    // Dipanggil otomatis Livewire saat wire:model.live="selectedDetailIds" berubah
+    public function updatedSelectedDetailIds()
     {
-        $id = (int) $id;
-        if (in_array($id, $this->selectedDetailIds)) {
-            $this->selectedDetailIds = array_values(array_diff($this->selectedDetailIds, [$id]));
-        } else {
-            $this->selectedDetailIds[] = $id;
-        }
         $this->showBulkDeleteConfirm = false;
     }
 
     public function toggleAllDetailSelection()
     {
-        $allIds = collect($this->detailPenerimaan)->pluck('id')->map(fn($id) => (int)$id)->toArray();
-        if (count($this->selectedDetailIds) === count($allIds)) {
+        // Normalisasi ke string agar cocok dengan value HTML attribute dari wire:model
+        $allIds = collect($this->detailPenerimaan)->pluck('id')->map(fn($id) => (string)$id)->toArray();
+        $currentIds = array_map('strval', $this->selectedDetailIds);
+
+        if (count($currentIds) === count($allIds)) {
             $this->selectedDetailIds = [];
         } else {
             $this->selectedDetailIds = $allIds;
@@ -778,7 +776,8 @@ public function deleteAllPenerimaan()
         if (empty($this->selectedDetailIds)) return;
 
         $count = count($this->selectedDetailIds);
-        Penerimaan::whereIn('id', $this->selectedDetailIds)->delete();
+        $ids = array_map('intval', $this->selectedDetailIds);
+        Penerimaan::whereIn('id', $ids)->delete();
 
         $this->selectedDetailIds = [];
         $this->showBulkDeleteConfirm = false;
