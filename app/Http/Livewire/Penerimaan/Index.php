@@ -748,7 +748,7 @@ public function deleteAllPenerimaan()
 
     public function toggleAllDetailSelection()
     {
-        $allIds = $this->detailPenerimaan->pluck('id')->map(fn($id) => (int)$id)->toArray();
+        $allIds = collect($this->detailPenerimaan)->pluck('id')->map(fn($id) => (int)$id)->toArray();
         if (count($this->selectedDetailIds) === count($allIds)) {
             $this->selectedDetailIds = [];
         } else {

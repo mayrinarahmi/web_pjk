@@ -555,7 +555,7 @@
                                <i class="bx bx-error-circle me-1"></i>
                                Hapus <strong>{{ count($selectedDetailIds) }} data</strong> senilai
                                <strong>
-                                   Rp {{ number_format($detailPenerimaan->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
+                                   Rp {{ number_format(collect($detailPenerimaan)->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
                                </strong>? Tindakan ini tidak bisa dibatalkan.
                            </span>
                            <div class="d-flex gap-1">
@@ -648,8 +648,8 @@
                                        @endcan
                                        <th colspan="2">Total</th>
                                        <th class="text-end">
-                                           <span class="{{ $detailPenerimaan->sum('jumlah') < 0 ? 'text-danger' : '' }}">
-                                               Rp {{ number_format($detailPenerimaan->sum('jumlah'), 0, ',', '.') }}
+                                           <span class="{{ collect($detailPenerimaan)->sum('jumlah') < 0 ? 'text-danger' : '' }}">
+                                               Rp {{ number_format(collect($detailPenerimaan)->sum('jumlah'), 0, ',', '.') }}
                                            </span>
                                        </th>
                                        <th colspan="3"></th>
@@ -671,7 +671,7 @@
                        <button type="button" class="btn btn-danger btn-sm" wire:click="confirmBulkDelete">
                            <i class="bx bx-trash me-1"></i>
                            Hapus Dipilih ({{ count($selectedDetailIds) }})
-                           &mdash; Rp {{ number_format($detailPenerimaan->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
+                           &mdash; Rp {{ number_format(collect($detailPenerimaan)->whereIn('id', $selectedDetailIds)->sum('jumlah'), 0, ',', '.') }}
                        </button>
                        @endif
                        @endcan
